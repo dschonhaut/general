@@ -11,7 +11,7 @@ Description:
     Functions for processing EEG data.
 
 Last Edited: 
-    11/5/18
+    4/21/21
 """
 from collections import OrderedDict
 import mkl
@@ -21,7 +21,9 @@ import mne
 from ptsa.data.TimeSeriesX import TimeSeries 
 
 
-def filter_lfp(lfp, l_freq, h_freq):
+def filter_lfp(lfp, 
+               l_freq=None, 
+               h_freq=None):
     """Bandpass filter the LFP using MNE.
 
     Parameters
@@ -49,6 +51,7 @@ def filter_lfp(lfp, l_freq, h_freq):
                                   'samplerate': lfp.samplerate.data.tolist()})
     return lfp_filt
 
+
 def filter_lfp_bands(lfp, bands, zscore_lfp=False):
     """Bandpass filter the LFP for 1+ bands.
 
@@ -73,10 +76,10 @@ def filter_lfp_bands(lfp, bands, zscore_lfp=False):
     for band_name, pass_band in bands.items():
         lfp_filt[band_name] = filter_lfp(lfp, pass_band[0], pass_band[1])
         if zscore_lfp:
-            lfp_filt[band_name] = ((lfp_filt[band_name] - lfp_filt[band_name].mean(dim='time')) 
-                                   / lfp_filt[band_name].std(dim='time'))
+            lfp_filt[band_name] = ((lfp_filt[band_name] - lfp_filt[band_name].mean(dim='time')) / lfp_filt[band_name].std(dim='time'))
     return lfp_filt
     
+
 def get_hilbert(lfp, zscore_power=False):
     """Return Hilbert-transformed LFP power and phase.
 
