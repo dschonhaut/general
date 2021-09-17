@@ -14,8 +14,22 @@ Helper functions for common tasks with simple python classes.
 
 Last Edited
 ----------- 
-2/26/20
+7/17/21
 """
+import numpy as np
+from collections import OrderedDict as od
+
+
+def invert_dict(d):
+    """Invert a dictionary of string keys and list values."""
+    if type(d) == dict:
+        newd = {}
+    else:
+        newd = od([])
+    for k, v in d.items():
+        for x in v:
+            newd[x] = k
+    return newd
 
 
 def str_replace(obj_in, 
@@ -45,3 +59,59 @@ def str_replace(obj_in,
         obj_out = obj_out[0]
             
     return obj_out
+
+
+def circit(val,
+           prop='r',
+           scale=1):
+    """Solve for the properties of, and/or transform, a circle.
+    
+    Parameters
+    ----------
+    val : number > 0
+        Value of the input circle property.
+    prop : str
+        'r' = radius
+        'd' = diameter
+        'a' = area
+        'c' = circumference
+    scale : number > 0
+        Applies val *= scale to the output circle.
+    
+    Returns
+    -------
+    circle : dict
+        Contains r, d, a, and c versus the input circle.
+    """
+    # Transform the output circle.
+    val *= scale
+
+    # Solve the circle's properties.
+    if prop == 'r':
+        r = val
+        d = r * 2
+        a = np.pi * np.square(r)
+        c = 2 * np.pi * r
+    elif prop == 'd':
+        d = val
+        r = d / 2
+        a = np.pi * np.square(r)
+        c = 2 * np.pi * r
+    elif prop == 'a':
+        a = val
+        r = np.sqrt(a / np.pi)
+        d = r * 2
+        c = 2 * np.pi * r
+    elif prop == 'c':
+        c = val
+        r = c / (2 * np.pi)
+        d = r * 2
+        a = np.pi * np.square(r)
+    
+    # Store the outputs.
+    circle = {'r': r,
+              'd': d,
+              'a': a,
+              'c': c}
+    
+    return circle
