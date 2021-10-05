@@ -49,18 +49,30 @@ def str_replace(obj_in,
     obj_out : str or list[str]
         Same as obj_in but with values replaced.
     """
-    obj_out = list(obj_in)
-    n_items = len(obj_out)
-    for _i in range(n_items):
+    if isinstance(obj_in, str):
+        obj_out = [obj_in]
+    else:
+        obj_out = obj_in.copy()
+
+    for _i in range(len(obj_out)):
         for old_str, new_str in replace_vals.items():
             obj_out[_i] = obj_out[_i].replace(old_str, new_str)
     
-    if n_items == 1:
+    if isinstance(obj_in, str):
         obj_out = obj_out[0]
             
     return obj_out
 
 
+def strip_space(in_str):
+    """Strip 2+ adjoining spaces down to 1."""
+    out_str = in_str
+    for iSpace in range(len(in_str), 1, -1):
+        search_str = ' ' * iSpace
+        out_str = out_str.replace(search_str, ' ')
+    return out_str
+
+    
 def circit(val,
            prop='r',
            scale=1):
