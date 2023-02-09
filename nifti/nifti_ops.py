@@ -70,16 +70,21 @@ def load_nii(
 def load_nii_flex(obj, dat_only=False, **kws):
     """Load Nifti using flexible input formatting and variable outputs.
 
-    Acceptable inputs for `obj` include:
-    - filepath string
-    - Nifti image
-    - ndarray
-    - something that can be cast as an array
-
-    Returns (`img`, `dat`) if `obj` is a filepath or Nifti image, or
-    just `dat` if `dat_only` is true or `obj` is an ndarray.
-
+    Parameters
+    ----------
+    obj
+        The Nifti object. Acceptable inputs include a filepath string,
+        Nifti image, ndarray, or object that can be cast as an ndarray.
+    dat_only : bool
+        If true only the data array is returned; otherwise function
+        returns the (img, dat) nifti pair.
     **kws are passed to _format_array()
+
+    Returns
+    -------
+    [img] : Nifti1Image
+        Returned only if `dat_only` is false.
+    dat : ndarray or ndarray subclass
     """
     if isinstance(obj, str):
         img, dat = load_nii(obj, **kws)
@@ -97,10 +102,18 @@ def load_nii_flex(obj, dat_only=False, **kws):
             return img, dat
     elif isinstance(obj, np.ndarray):
         dat = _format_array(obj, **kws)
-        return dat
+        if dat_only:
+            return dat
+        else:
+            msg = "\nCannot return the (img, dat) pair due to missing header info."
+            raise RuntimeError(msg)
     else:
         dat = _format_array(np.asanyarray(obj), **kws)
-        return dat
+        if dat_only:
+            return dat
+        else:
+            msg = "\nCannot return the (img, dat) pair due to missing header info."
+            raise RuntimeError(msg)
 
 
 def _format_array(
@@ -174,14 +187,16 @@ def _format_array(
     return dat
 
 
-def save_nii(img, dat, filename, overwrite=False, verbose=True):
-    """Save a new NIfTI image to disc."""
-    if overwrite or not op.exists(filename):
+def save_nii(img, dat, outfile, overwrite=False, verbose=True):
+    """Save a new NIfTI image to disc and return the saved filepath."""
+    if overwrite or not op.exists(outfile):
         newimg = nib.Nifti1Image(dat, affine=img.affine, header=img.header)
-        newimg.to_filename(filename)
+        newimg.to_filename(outfile)
         if verbose:
-            print("Saved {}".format(filename))
-    return None
+            print("Saved {}".format(outfile))
+        return outfile
+    else:
+        return None
 
 
 def toggle_gzip(infile):
@@ -192,7 +207,9 @@ def toggle_gzip(infile):
         return infile + ".gz"
 
 
-def create_suvr(pet, ref_region, outfile=None, overwrite=False, verbose=False):
+def create_suvr(
+    pet, ref_region, dat_only=False, outfile=None, overwrite=False, verbose=False
+):
     """Return the voxelwise SUVR data array and optionally save to disc.
 
     pet and ref_region can each be passed as a filepath string to a
@@ -207,6 +224,9 @@ def create_suvr(pet, ref_region, outfile=None, overwrite=False, verbose=False):
     ref_region : string, nifti image, or array-like
         The reference region. Must have the same dimensions as pet.
         Values > 0 will be used as the reference region mask.
+    dat_only : bool
+        If true only the data array is returned; otherwise function
+        returns the (img, dat) nifti pair.
     outfile : string or None
         Filepath to the SUVR image that will be saved. If None, the SUVR
         array is returned but nothing is saved to disk.
@@ -219,20 +239,21 @@ def create_suvr(pet, ref_region, outfile=None, overwrite=False, verbose=False):
 
     Returns
     -------
+    [suvr_img] : Nifti1Image
+        Returned only if `dat_only` is false.
     suvr_dat : ndarray or ndarray subclass
-
     """
     # Load the PET image.
     if isinstance(pet, (str, nib.Nifti1Pair)):
         pet_img, pet_dat = load_nii_flex(pet, binarize=True)
     else:
-        pet_dat = load_nii_flex(pet, binarize=True)
+        pet_dat = load_nii_flex(pet, dat_only=True, binarize=True)
 
     # Load the ref region.
     if isinstance(ref_region, (str, nib.Nifti1Pair)):
         rr_img, rr_dat = load_nii_flex(ref_region, binarize=True)
     else:
-        rr_dat = load_nii_flex(ref_region, binarize=True)
+        rr_dat = load_nii_flex(ref_region, dat_only=True, binarize=True)
 
     assert pet_dat.shape == rr_dat.shape
 
@@ -251,21 +272,27 @@ def create_suvr(pet, ref_region, outfile=None, overwrite=False, verbose=False):
             if "rr_img" not in locals():
                 msg = (
                     "\nCannot save SUVR due to missing header info."
-                    "\nMust import `pet` or `ref_region` as a filename or NIfTI image."
+                    "\nMust import `pet` or `ref_region` as a filepath or NIfTI image."
                 )
                 warnings.warn(msg)
             else:
-                affine = rr_img.affine
-                header = rr_img.header
+                suvr_img = rr_img
         else:
-            affine = pet_img.affine
-            header = pet_img.header
-        suvr_img = nib.Nifti1Image(suvr_dat, affine, header)
-        suvr_img.to_filename(outfile)
-        if verbose:
-            print("Saved {}".format(outfile))
+            suvr_img = pet_img
+        outfile = save_nii(suvr_img, suvr_dat, outfile, overwrite, verbose)
 
-    return suvr_dat
+    if dat_only:
+        return suvr_dat
+    else:
+        if "pet_img" not in locals():
+            if "rr_img" not in locals():
+                msg = "\nCannot return the (img, dat) pair due to missing header info."
+                raise RuntimeError(msg)
+            else:
+                suvr_img = rr_img
+        else:
+            suvr_img = pet_img
+        return suvr_img, suvr_dat
 
 
 def roi_mean(pet, **rois):
