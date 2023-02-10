@@ -245,9 +245,9 @@ def create_suvr(
     """
     # Load the PET image.
     if isinstance(pet, (str, nib.Nifti1Pair)):
-        pet_img, pet_dat = load_nii_flex(pet, binarize=True)
+        pet_img, pet_dat = load_nii_flex(pet)
     else:
-        pet_dat = load_nii_flex(pet, dat_only=True, binarize=True)
+        pet_dat = load_nii_flex(pet, dat_only=True)
 
     # Load the ref region.
     if isinstance(ref_region, (str, nib.Nifti1Pair)):
