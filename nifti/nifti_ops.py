@@ -1,5 +1,7 @@
 import os.path as op
 import warnings
+from inspect import isfunction
+from collections import OrderedDict as od
 import numpy as np
 import pandas as pd
 import nibabel as nib
@@ -295,25 +297,46 @@ def create_suvr(
         return suvr_img, suvr_dat
 
 
-def roi_mean(pet, **rois):
-    """Return the mean pet value within each ROI mask.
+def roi_desc(dat, rois, aggf=np.mean, conv_nan=0):
+    """Apply `aggf` over `dat` values within each ROI mask.
 
     Parameters
     ----------
-    pet : string, nifti image, or array-like
-    rois : {name: obj} where obj is a string, nifti image, or array-like
+    dat :
+        Filepath string, nifti image, or array-like object.
+    rois : dict, {str: obj}
+        Map each ROI name to its filepath string, nifti image, or array.
+    aggf : function, list of functions, or dict of functions
+        Function or functions to apply over `dat` values within each
+        ROI.
+    conv_nan : bool, number, or NoneType object
+        Convert NaNs in `dat` to `conv_nan`. No conversion is applied if
+        `conv_nan` is np.nan, None, or False.
 
     Returns
     -------
-    means : pd.Series of mean values in each ROI
+    grouped : Series or DataFrame
+        `aggf` output for each agg function, for each ROI. Index is the
+        ROI names, columns are the function names.
     """
-    pet_dat = load_nii_flex(pet, dat_only=True, conv_nan=None)
+    dat = load_nii_flex(dat, dat_only=True, conv_nan=conv_nan)
 
-    means = pd.Series(dtype=np.float32)
-    for roi, mask in rois.items():
-        mask = load_nii_flex(roi, dat_only=True, binarize=True)
-        assert pet_dat.shape == mask.shape
-        mask_idx = np.where(mask)
-        means[roi] = np.mean(pet_dat[mask_idx])
+    if isfunction(aggf):
+        grouped = pd.Series(dtype=np.float32, name=aggf.__name__)
+        for roi, roi_mask in rois.items():
+            mask = load_nii_flex(roi_mask, dat_only=True, binarize=True)
+            assert dat.shape == mask.shape
+            mask_idx = np.where(mask)
+            grouped[roi] = aggf(dat[mask_idx])
+    else:
+        if not isinstance(aggf, dict):
+            aggf = od({func.__name__: func for func in aggf})
+        grouped = pd.DataFrame(index=list(rois.keys()), columns=list(aggf.keys()))
+        for roi, roi_mask in rois.items():
+            mask = load_nii_flex(roi_mask, dat_only=True, binarize=True)
+            assert dat.shape == mask.shape
+            mask_idx = np.where(mask)
+            for func_name, func in aggf.items():
+                grouped.at[roi, func_name] = func(dat[mask_idx])
 
-    return means
+    return grouped
