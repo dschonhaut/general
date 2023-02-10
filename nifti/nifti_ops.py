@@ -162,7 +162,7 @@ def _format_array(
 
     # Convert NaNs.
     if not np.any((conv_nan is None, conv_nan is False, conv_nan is np.nan)):
-        dat[np.isnan(dat)] = conv_nan
+        dat[np.invert(np.isfinite(dat))] = conv_nan
 
     # Recast the data type.
     if binarize or (dtype is bool):
