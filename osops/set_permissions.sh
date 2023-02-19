@@ -32,19 +32,11 @@ fi
 chown $user:$group $parent
 
 # Set default permissions for parent and its subdirectories and files
-find $parent -exec \
-  setfacl -d -m \
-  d:u::rwx,d:g:$group:rwx,d:o::r-x,\
-  f:u::rw-,f:g:$group:rw-,f:o::r-- \
-  {} +
+find $parent -exec setfacl -d -m d:u::rwx,d:g:$group:rwx,d:o::r-x,f:u::rw-,f:g:$group:rw-,f:o::r-- {} +
 
 # Allow execute permissions for the scripts/ directory, if it exists
 if [ -d "$parent/scripts" ]; then
-  find $parent/scripts -exec \
-  setfacl -d -m \
-  d:u::rwx,d:g:$group:rwx,d:o::r-x,\
-  f:u::rwx,f:g:$group:rwx,f:o::r-x \
-  {} +
+  find $parent/scripts -exec setfacl -d -m d:u::rwx,d:g:$group:rwx,d:o::r-x,f:u::rwx,f:g:$group:rwx,f:o::r-x {} +
 fi
 
 echo "Permissions set for $parent"
