@@ -1,10 +1,15 @@
+import os
 import os.path as op
+import gzip
+import shutil
 import warnings
 from inspect import isfunction
 from collections import OrderedDict as od
 import numpy as np
 import pandas as pd
 import nibabel as nib
+import transforms3d.affines as affines
+from general.basic.str_methods import *
 
 
 def load_nii(
@@ -207,6 +212,115 @@ def toggle_gzip(infile):
         return infile[:-3]
     else:
         return infile + ".gz"
+
+
+def gzip_nii(infile, rm_orig=True):
+    """Gzip a *.nii file and return the output filename.
+
+    Nothing happens if the infile does not exist or does not end with
+    ".nii", in which case infile is returned.
+    """
+    if op.isfile(infile) and infile.endswith(".nii"):
+        outfile = infile + ".gz"
+        with open(infile, "rb") as f_in:
+            with gzip.open(outfile, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        if rm_orig:
+            os.remove(infile)
+        return outfile
+    else:
+        return infile
+
+
+def gunzip_nii(infile, rm_orig=True):
+    """Gunzip a *.nii.gz file and return the output filename.
+
+    Nothing happens if the infile does not exist or does not end with
+    ".nii.gz", in which case infile is returned.
+    """
+    if op.isfile(infile) and infile.endswith(".nii.gz"):
+        outfile = infile[:-3]
+        with gzip.open(infile, "rb") as f_in:
+            with open(outfile, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out)
+        if rm_orig:
+            os.remove(infile)
+        return outfile
+    else:
+        return infile
+
+
+def gzip_or_gunzip_nii(infile, rm_orig=True):
+    """Gzip *.nii or gunzip *.nii.gz file and return output filename.
+
+    Nothing happens if the infile does not exist or does not end with
+    ".nii" or ".nii.gz", in which case infile is returned.
+    """
+    if op.isfile(infile):
+        if infile.endswith(".nii"):
+            outfile = gzip_nii(infile, rm_orig)
+            return outfile
+        elif infile.endswith(".nii.gz"):
+            outfile = gunzip_nii(infile, rm_orig)
+            return outfile
+    return infile
+
+
+def recenter_nii(
+    infile, prefix=None, suffix=None, save_output=True, overwrite=True, verbose=True
+):
+    """Recenter the image in the center of the voxel grid.
+
+    Default behavior is to overwrite the infile. If save_output is True,
+    the output file will be saved to disk in the same directory as the
+    input file.
+
+    Parameters
+    ----------
+    infile : str
+        Path to the input image.
+    prefix : str, optional
+        Basename prefix for the output file.
+    suffix : str, optional
+        Basename suffix for the output file.
+    save_output : bool
+        Save the output image.
+    overwrite : bool
+        Overwrite the output image file if it already exists.
+    verbose : bool
+        Print the output filepath if the output file is saved.
+
+    Returns
+    -------
+    img_out : nibabel.Nifti1Image
+        Output image.
+    dat : np.ndarray
+        Output image data array.
+    outfile : str
+        Output filepath.
+    """
+    outfile = add_presuf(infile, prefix, suffix)
+    img_in, dat_in = load_nii(infile)
+    T, R, Z, S = affines.decompose(img_in.affine)
+    T_new = (np.asanyarray(img_in.shape[:3]) - 1) * 0.5 * Z
+    T_new = np.sign(Z) * -1 * T_new
+    aff_new = affines.compose(T_new, R, Z)
+    img_out = nib.Nifti1Image(dataobj=dat_in, affine=aff_new)
+
+    if save_output:
+        if verbose and (overwrite or not op.isfile(outfile)):
+            print("Recentering {}".format(op.basename(infile)))
+        outfile = save_nii(
+            img=img_out,
+            dat=dat_in,
+            outfile=outfile,
+            overwrite=overwrite,
+            verbose=verbose,
+        )
+    else:
+        outfile = None
+
+    return img_out, dat_in, outfile
 
 
 def create_suvr(

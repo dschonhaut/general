@@ -1,23 +1,39 @@
 #!/Users/dschonhaut/mambaforge/envs/nipy310/bin/python
 
+"""
+$ test_if_equal.py img1.nii img2.nii [mask.nii]
+
+"""
+
 import sys
 import os
 import os.path as op
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-import nifti_ops as nops
+
+sys.path.append(op.join(op.expanduser("~"), "code"))
+import general.nifti.nifti_ops as nops
 
 
 def compare_imgs(img1_path, img2_path, mask=None):
-    """Compare similarity between 2 images and return if_equal and mean, stdev, and range of voxel differences.
+    """Test two niftis for voxelwise equality.
 
-    Voxel differences are taken as absolute value, and only considers voxels where at least 1 of the 2 images has a nonzero value.
+    Note: Tests the data arrays for equality, not the image headers!
 
-    Keyword arguments:
-    img1_path -- 	file path to a nifti image
-    img2_path -- 	file path to a nifti image
-    mask      --    file path to a nifti image (optional mask for comparing img1 and img2 voxels)
+    Also prints voxelwise difference stats for voxels with nonzero and
+    non-NaN in both images. If a mask is included, only voxels within
+    the mask are included in the equality test and voxelwise difference
+    stats.
+
+    Parameters
+    ----------
+    img1_path : str
+        Path to a nifti image.
+    img2_path : str
+        Path to a nifti image with equal dimensions as img1.
+    mask : str
+        Path to a nifti image with equal dimensions as img1 and img2.
     """
 
     # Load the input files into numpy matrices
@@ -80,37 +96,41 @@ def compare_imgs(img1_path, img2_path, mask=None):
 
 
 if __name__ == "__main__":
-    cwd = os.getcwd() + "/"
+    if len(sys.argv) not in (3, 4):
+        print(
+            __doc__,
+            compare_imgs.__doc__,
+            sep="\n",
+        )
+        exit()
+
+    cwd = os.getcwd()
 
     # Get the images to test from command-line arguments
-    if len(sys.argv) in (3, 4):
-        img1_path = cwd + sys.argv[1]
-        if not op.exists(img1_path):
-            img1_path = sys.argv[1]
+    img1_path = op.join(cwd, sys.argv[1])
+    if not op.exists(img1_path):
+        img1_path = sys.argv[1]
 
-        img2_path = cwd + sys.argv[2]
-        if not op.exists(img2_path):
-            img2_path = sys.argv[2]
+    img2_path = op.join(cwd, sys.argv[2])
+    if not op.exists(img2_path):
+        img2_path = sys.argv[2]
 
-        if not op.exists(img1_path):
-            print("\nCould not find {}\n".format(img1_path))
-            exit()
-        if not op.exists(img2_path):
-            print("\nCould not find {}\n".format(img2_path))
-            exit()
-
-        if len(sys.argv) == 4:
-            mask = cwd + sys.argv[3]
-            if not op.exists(mask):
-                mask = sys.argv[3]
-            if not op.exists(mask):
-                print("\nCould not find {}\n".format(mask))
-                exit()
-        else:
-            mask = None
-    else:
-        print(__doc__)
+    if not op.exists(img1_path):
+        print("\nCould not find {}\n".format(img1_path))
         exit()
+    if not op.exists(img2_path):
+        print("\nCould not find {}\n".format(img2_path))
+        exit()
+
+    if len(sys.argv) == 4:
+        mask = op.join(cwd, sys.argv[3])
+        if not op.exists(mask):
+            mask = sys.argv[3]
+        if not op.exists(mask):
+            print("\nCould not find {}\n".format(mask))
+            exit()
+    else:
+        mask = None
 
     # Figure out if the images are equal and print the result
     (
@@ -132,24 +152,20 @@ if __name__ == "__main__":
     ) = compare_imgs(img1_path, img2_path, mask)
 
     if imgs_equal:
-        msg = "The arrays are equal."
-    else:
-        msg = "The arrays are NOT equal."
-    if mask:
-        if imgs_equal:
-            msg = "The arrays are equal within the mask."
+        if mask:
+            msg = "The image data arrays are equal within the mask."
         else:
-            msg = "The arrays are NOT equal within the mask."
+            msg = "The image data arrays are equal."
     else:
-        if imgs_equal:
-            msg = "The arrays are equal."
+        if mask:
+            msg = "The image data arrays are NOT equal within the mask."
         else:
-            msg = "The arrays are NOT equal."
+            msg = "The image data arrays are NOT equal."
 
     print(
         "",
         msg,
-        "-" * len(msg),
+        "",
         "nonzero voxels = {:,}/{:,} ({:.2%})".format(
             num_nonzero, n_voxels, pct_nonzero
         ),
@@ -160,6 +176,7 @@ if __name__ == "__main__":
         "pearson = {:.4f}".format(_r),
         "spearman = {:.4f}".format(_rho),
         "",
+        "Percentile values...",
         pd.DataFrame(
             [dat1_pcts, dat2_pcts, dat1_sub_dat2_pcts, dat1_div_dat2_pcts],
             columns=pcts,
