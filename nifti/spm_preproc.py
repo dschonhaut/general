@@ -1,7 +1,7 @@
 #!/Users/dschonhaut/mambaforge/envs/nipy310/bin/python
 
 """
-spm.py
+spm_preproc.py
 
 Description: Functions for automatic nifti recentering and SPM12
 coregistration, smoothing, and segmentation, with a full command-line
@@ -22,7 +22,22 @@ import nipype.interfaces.spm as spm
 
 
 def recenter(images, prefix=None, suffix=None):
-    """Recenter images in the center of the voxel grid."""
+    """Recenter nifti images in the center of the voxel grid.
+
+    This process involves rewriting the image header and does not affect
+    the underlying image data, nor use Matlab/SPM (just Python).
+
+    Images are rewritten inplace if no prefix or suffix is specified.
+
+    Parameters
+    ----------
+    images : str or list
+        Path to the image file or list of image files to recenter.
+    prefix : str
+        Prefix to use for the output file names.
+    suffix : str
+        Suffix to use for the output file names.
+    """
     if isinstance(images, str):
         images = [images]
     outfiles = []
@@ -37,7 +52,7 @@ def spm_coregister(
     target,
     other_images=[],
     jobtype="estwrite",
-    out_prefix="r",
+    prefix="r",
     n_neighbor=False,
     **kws
 ):
@@ -56,7 +71,7 @@ def spm_coregister(
         parameters to.
     jobtype : str
         "estimate" -- Rigid body transform
-        "write" -- Reslice to target voxel dimensions
+        "write" or "reslice" -- Reslice to target voxel dimensions
         "estwrite" -- Rigid body transform and reslicing
     out_prefix : str
         Prefix for the output files.
@@ -79,26 +94,30 @@ def spm_coregister(
     # Initialize the coregistration interface.
     coreg = spm.Coregister(**kws)
 
+    # Determine the jobtype.
+    if jobtype == "reslice":
+        jobtype = "write"
+
     # If the job is to coregister without reslicing, make a copy of each
     # input file using the specified output prefix so input files remain
     # unchanged (default SPM behavior is to overwrite the input header).
     if jobtype == "estimate":
         # Copy the source image.
-        _source = op.join(op.dirname(source), out_prefix + op.basename(source))
+        _source = op.join(op.dirname(source), prefix + op.basename(source))
         shutil.copy(source, _source)
         source = _source
         if len(other_images) > 0:
             # Copy the other images.
             _other_images = []
             for f in other_images:
-                _f = op.join(op.dirname(f), out_prefix + op.basename(f))
+                _f = op.join(op.dirname(f), prefix + op.basename(f))
                 shutil.copy(f, _f)
                 _other_images.append(_f)
             other_images = _other_images
         outfiles = [source] + other_images
     else:
-        outfiles = [op.join(op.dirname(source), out_prefix + op.basename(source))] + [
-            op.join(op.dirname(f), out_prefix + op.basename(f)) for f in other_images
+        outfiles = [op.join(op.dirname(source), prefix + op.basename(source))] + [
+            op.join(op.dirname(f), prefix + op.basename(f)) for f in other_images
         ]
 
     # Set the coregistration parameters.
@@ -107,6 +126,7 @@ def spm_coregister(
     if other_images is not None:
         coreg.inputs.apply_to_files = other_images
     coreg.inputs.jobtype = jobtype
+    coreg.inputs.out_prefix = prefix
     if n_neighbor and jobtype in ["write", "estwrite"]:
         coreg.inputs.write_interp = 0
 
@@ -340,7 +360,7 @@ def spm_smooth(infiles, fwhm=None, res_in=None, res_target=None, prefix="s", **k
     # Check that the smoothing kernel is valid.
     if fwhm is None:
         assert res_in is not None and res_target is not None
-        fwhm = calc_3d_smooth(res_in, res_target)
+        fwhm = nops.calc_3d_smooth(res_in, res_target)
     else:
         assert res_in is None and res_target is None
         if isinstance(fwhm, (int, float, str)):
@@ -364,39 +384,6 @@ def spm_smooth(infiles, fwhm=None, res_in=None, res_target=None, prefix="s", **k
     result = smooth.run()
     outfiles = smooth._list_outputs()["smoothed_files"]
     return outfiles
-
-
-def calc_3d_smooth(res_in, res_target, verbose=False):
-    """Return FWHM of the Gaussian that smooths initial to target resolution.
-
-    Parameters
-    ----------
-    res_in : float or array-like
-        Starting resolution in mm.
-    res_target : float or array-like
-        Target resolution in mm.
-
-    Returns
-    -------
-    fwhm : 3-length list
-        Amount to smooth by in mm in each dimension.
-    """
-    if isinstance(res_in, (int, float)):
-        res_in = [res_in, res_in, res_in]
-    elif len(res_in) == 1:
-        res_in = [res_in[0], res_in[0], res_in[0]]
-    if isinstance(res_target, (int, float)):
-        res_target = [res_target, res_target, res_target]
-    elif len(res_target) == 1:
-        res_target = [res_target[0], res_target[0], res_target[0]]
-    res_in = np.asanyarray(res_in)
-    res_target = np.asanyarray(res_target)
-    assert res_in.size == res_target.size == 3
-    assert res_in.min() > 0 and res_target.min() > 0
-    fwhm = np.sqrt((res_target**2) - (res_in**2)).tolist()
-    if verbose:
-        print("FWHM = {}".format(fwhm))
-    return fwhm
 
 
 def _parse_args():
@@ -426,7 +413,7 @@ def _parse_args():
     # Recenter
     parser_recenter = subparsers.add_parser(
         "recenter",
-        help="Recenter",
+        help="Recenter (all in Python; no call to SPM)",
         formatter_class=TextFormatter,
         epilog="Examples:\n" + examples["recenter"],
     )
@@ -489,12 +476,12 @@ def _parse_args():
         "--jobtype",
         type=str,
         default="estwrite",
-        choices=["estimate", "write", "estwrite"],
+        choices=["estimate", "write", "reslice", "estwrite"],
         metavar="JOBTYPE",
         help="{}\n{}\n{}\n\n{}".format(
-            "estimate : Rigid body transform",
-            "write    : Reslice to target voxel dimensions",
-            "estwrite : Rigid body transform and reslicing",
+            "estimate        : Rigid body transform",
+            "write | reslice : Reslice to target voxel dimensions",
+            "estwrite        : Rigid body transform and reslicing",
             "Default: %(default)s",
         ),
     )
@@ -908,8 +895,9 @@ if __name__ == "__main__":
         # Run coreg
         jobtype_fancy = {
             "estimate": "Coregistering",
-            "estwrite": "Coregistering and reslicing",
             "write": "Reslicing",
+            "reslice": "Reslicing",
+            "estwrite": "Coregistering and reslicing",
         }
         msg = "\n{} {} to {}".format(
             jobtype_fancy[jobtype], op.basename(source), op.basename(target)
@@ -925,7 +913,7 @@ if __name__ == "__main__":
             target=target,
             other_images=other_images,
             jobtype=jobtype,
-            out_prefix=args.prefix,
+            prefix=args.prefix,
             n_neighbor=args.nearest_neighbor,
         )
         print(

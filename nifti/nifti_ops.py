@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import nibabel as nib
 import transforms3d.affines as affines
-from general.basic.str_methods import *
+import general.basic.str_methods as strm
 
 
 def load_nii(
@@ -54,8 +54,7 @@ def load_nii(
     dat : ndarray or ndarray subclass
     """
     # Get the right file extension.
-    if not op.exists(infile):
-        infile = toggle_gzip(infile)
+    infile = find_gzip(infile)
 
     # Load the NIfTI image and data array.
     img = nib.load(infile)
@@ -94,7 +93,8 @@ def load_nii_flex(obj, dat_only=False, **kws):
     dat : ndarray or ndarray subclass
     """
     if isinstance(obj, str):
-        img, dat = load_nii(obj, **kws)
+        infile = find_gzip(obj)
+        img, dat = load_nii(infile, **kws)
         if dat_only:
             return dat
         else:
@@ -206,12 +206,62 @@ def save_nii(img, dat, outfile, overwrite=False, verbose=True):
         return None
 
 
-def toggle_gzip(infile):
-    """Toggle file string gzipping."""
-    if infile.endswith(".gz"):
-        return infile[:-3]
+def find_gzip(infile, raise_error=False, return_infile=False):
+    """Find the existing file, gzipped or gunzipped.
+
+    Return the infile if it exists, otherwise return the gzip-toggled
+    version of the infile if it exists, otherwise return None or raise
+    a FileNotFoundError.
+
+    Parameters
+    ----------
+    infile : str
+        The input file string.
+    raise_error : bool
+        If true, a FileNotFoundError is raised if the outfile does not
+        exist.
+    return_infile : bool
+        If true, the infile is returned if the outfile does not exist.
+        Otherwise None is returned if the outfile does not exist. This
+        argument is ignored if raise_error is true.
+    """
+    if op.isfile(infile):
+        outfile = infile
+        return outfile
+    elif op.isfile(toggle_gzip(infile)):
+        outfile = toggle_gzip(infile)
+        return outfile
     else:
-        return infile + ".gz"
+        if raise_error:
+            raise FileNotFoundError(
+                "File not found: {}[.gz]".format(infile.replace(".gz", ""))
+            )
+        elif return_infile:
+            return infile
+        else:
+            return None
+
+
+def toggle_gzip(infile):
+    """Return the gzip-toggled filepath.
+
+    Parameters
+    ----------
+    infile : str
+        The input file string.
+
+    Returns
+    -------
+    outfile : str
+        The output file string, which is the input file string minus
+        the ".gz" extension if it exists in infile, or the input file
+        string plus the ".gz" extension if it does not exist in infile.
+    """
+    if infile.endswith(".gz"):
+        outfile = infile[:-3]
+    else:
+        outfile = infile + ".gz"
+    return outfile
 
 
 def gzip_nii(infile, rm_orig=True):
@@ -266,14 +316,59 @@ def gzip_or_gunzip_nii(infile, rm_orig=True):
     return infile
 
 
+def recenter_niis(images, prefix=None, suffix=None, verbose=True):
+    """Recenter 1+ nifti images in the center of the voxel grid.
+
+    This process involves rewriting the image header and does not affect
+    the underlying image data. Default behavior is to overwrite the
+    infile unless a prefix or suffix is specified.
+
+    A note of caution: If the infile plus a given prefix or suffix
+    already exists, that file will be overwritten.
+
+    Parameters
+    ----------
+    images : str or list
+        Path to the image file or list of image files to recenter.
+    prefix : str
+        Prefix to use for the output file names.
+    suffix : str
+        Suffix to use for the output file names.
+
+    Returns
+    -------
+    outfiles : list
+        List of output file names.
+    """
+    if isinstance(images, str):
+        images = [images]
+    outfiles = []
+    for image in images:
+        *_, outfile = recenter_nii(
+            image,
+            prefix=prefix,
+            suffix=suffix,
+            save_output=True,
+            overwrite=True,
+            verbose=verbose,
+        )
+        outfiles.append(outfile)
+    return outfiles
+
+
 def recenter_nii(
     infile, prefix=None, suffix=None, save_output=True, overwrite=True, verbose=True
 ):
-    """Recenter the image in the center of the voxel grid.
+    """Recenter nifti image in the center of the voxel grid.
 
-    Default behavior is to overwrite the infile. If save_output is True,
-    the output file will be saved to disk in the same directory as the
-    input file.
+    This process involves rewriting the image header and does not affect
+    the underlying image data. If save_output is True, the output file
+    is saved to disk in the same directory as the input file. Default
+    behavior is to overwrite the infile unless a prefix or suffix is
+    specified.
+
+    A note of caution: If overwrite is True and the infile plus a given
+    prefix or suffix already exists, that file will be overwritten.
 
     Parameters
     ----------
@@ -295,11 +390,11 @@ def recenter_nii(
     img_out : nibabel.Nifti1Image
         Output image.
     dat : np.ndarray
-        Output image data array.
+        Output image data array (identical to the infile data array).
     outfile : str
         Output filepath.
     """
-    outfile = add_presuf(infile, prefix, suffix)
+    outfile = strm.add_presuf(infile, prefix, suffix)
     img_in, dat_in = load_nii(infile)
     T, R, Z, S = affines.decompose(img_in.affine)
     T_new = (np.asanyarray(img_in.shape[:3]) - 1) * 0.5 * Z
@@ -321,6 +416,72 @@ def recenter_nii(
         outfile = None
 
     return img_out, dat_in, outfile
+
+
+def convert_values(
+    infile,
+    value_map,
+    outfile=None,
+    outfile_map=None,
+    overwrite=False,
+    verbose=True,
+    **kws
+):
+    """Convert values in a NIfTI image.
+
+    Parameters
+    ----------
+    infile : str
+        Path to the input image.
+    value_map : dict
+        Dictionary mapping old values to new values.
+    outfile : str
+        Path to the output image.
+    outfile_map : dict
+        Dictionary mapping new values to output filenames. Each new
+        value is saved as a separate mask image.
+    overwrite : bool
+        Overwrite the output image file if it already exists.
+    verbose : bool
+        Print the output filepath if the output file is saved.
+    **kws
+        Keyword arguments passed to load_nii.
+
+    Returns
+    -------
+    If outfile is provided, returns the output filepath.
+    If outfile_map is provided, returns a list of output filepaths.
+    """
+    # Check that either outfile or outfile_map is provided but not both.
+    if outfile is None and outfile_map is None:
+        raise ValueError("Either outfile or outfile_map must be provided.")
+    elif outfile is not None and outfile_map is not None:
+        raise ValueError("Only one of outfile or outfile_map can be provided.")
+
+    # Load the input nifti and create a zero-array with the same shape.
+    img, indat = load_nii(infile, **kws)
+    outdat = np.zeros_like(indat)
+
+    # Loop over value_map items and convert old values in indat to new
+    # values in outdat.
+    for oldval, newval in value_map.items():
+        outdat[indat == oldval] = newval
+
+    # Save the output nifti.
+    if outfile:
+        outfile = save_nii(img, outdat, outfile, overwrite=overwrite, verbose=verbose)
+        return outfile
+    # Save an output nifti file for each value in outfile_map.
+    else:
+        newfiles = []
+        for newval, newfile in outfile_map.items():
+            newdat = np.zeros_like(indat)
+            newdat[outdat == newval] = 1
+            newfile = save_nii(
+                img, newdat, newfile, overwrite=overwrite, verbose=verbose
+            )
+            newfiles.append(newfile)
+        return newfiles
 
 
 def create_suvr(
@@ -454,3 +615,43 @@ def roi_desc(dat, rois, aggf=np.mean, conv_nan=0):
                 grouped.at[roi, func_name] = func(dat[mask_idx])
 
     return grouped
+
+
+def calc_3d_smooth(res_in, res_target, squeeze=False, verbose=False):
+    """Return FWHM of the Gaussian that smooths initial to target resolution.
+
+    Parameters
+    ----------
+    res_in : float or array-like
+        Starting resolution in mm.
+    res_target : float or array-like
+        Target resolution in mm.
+    squeeze : bool
+        If True, squeeze the output to single float if possible.
+    verbose : bool
+        Whether to print the FWHM to standard output.
+
+    Returns
+    -------
+    fwhm : 3-length list or float
+        Amount to smooth by in mm in each dimension.
+    """
+    if isinstance(res_in, (int, float)):
+        res_in = [res_in, res_in, res_in]
+    elif len(res_in) == 1:
+        res_in = [res_in[0], res_in[0], res_in[0]]
+    if isinstance(res_target, (int, float)):
+        res_target = [res_target, res_target, res_target]
+    elif len(res_target) == 1:
+        res_target = [res_target[0], res_target[0], res_target[0]]
+    res_in = np.asanyarray(res_in)
+    res_target = np.asanyarray(res_target)
+    assert res_in.size == res_target.size == 3
+    assert res_in.min() > 0 and res_target.min() > 0
+    fwhm = np.sqrt((res_target**2) - (res_in**2)).tolist()
+    if squeeze:
+        if fwhm[0] == fwhm[1] == fwhm[2]:
+            fwhm = fwhm[0]
+    if verbose:
+        print("FWHM = {}".format(fwhm))
+    return fwhm
