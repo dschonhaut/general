@@ -7,10 +7,10 @@ Author:
     University of Pennsylvania
     daniel.schonhaut@gmail.com
 
-Description: 
+Description:
     Functions for indexing and operating on arrays.
 
-Last Edited: 
+Last Edited:
     7/9/20
 """
 import numpy as np
@@ -110,3 +110,17 @@ def unique(values, **kwargs):
     if "sort" not in kwargs:
         kwargs["sort"] = True
     return pd.Series(values).value_counts(**kwargs)
+
+
+def crop_arr3d(arr, mask=None, crop=0.05):
+    """Crop out empty space around a 3D array."""
+    assert arr.ndim == 3
+    if mask is None:
+        mask = np.isfinite(mask)
+    shp = np.asanyarray(mask.shape)
+    xind = np.where(np.sum(mask, axis=(1, 2)) > (np.prod(shp[[1, 2]]) * crop))[0]
+    yind = np.where(np.sum(mask, axis=(0, 2)) > (np.prod(shp[[0, 2]]) * crop))[0]
+    zind = np.where(np.sum(mask, axis=(0, 1)) > (np.prod(shp[[0, 1]]) * crop))[0]
+    return arr[
+        slice(xind[0], xind[-1]), slice(yind[0], yind[-1]), slice(zind[0], zind[-1])
+    ]

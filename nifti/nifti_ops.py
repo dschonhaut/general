@@ -15,6 +15,7 @@ import general.basic.str_methods as strm
 def load_nii(
     infile,
     dtype=np.float32,
+    squeeze=True,
     flatten=False,
     conv_nan=0,
     binarize=False,
@@ -64,6 +65,7 @@ def load_nii(
     dat = _format_array(
         dat,
         dtype=dtype,
+        squeeze=squeeze,
         flatten=flatten,
         conv_nan=conv_nan,
         binarize=binarize,
@@ -126,6 +128,7 @@ def load_nii_flex(obj, dat_only=False, **kws):
 def _format_array(
     dat,
     dtype=np.float32,
+    squeeze=True,
     flatten=False,
     conv_nan=0,
     binarize=False,
@@ -164,6 +167,10 @@ def _format_array(
     # Flatten the array.
     if flatten:
         dat = dat.ravel()
+
+    # Squeeze the array.
+    elif squeeze:
+        dat = np.squeeze(dat)
 
     # Convert NaNs.
     if not np.any((conv_nan is None, conv_nan is False, conv_nan is np.nan)):
@@ -357,15 +364,22 @@ def recenter_niis(images, prefix=None, suffix=None, verbose=True):
 
 
 def recenter_nii(
-    infile, prefix=None, suffix=None, save_output=True, overwrite=True, verbose=True
+    obj,
+    outfile=None,
+    prefix=None,
+    suffix=None,
+    save_output=True,
+    overwrite=True,
+    verbose=True,
+    **kws
 ):
     """Recenter nifti image in the center of the voxel grid.
 
     This process involves rewriting the image header and does not affect
     the underlying image data. If save_output is True, the output file
     is saved to disk in the same directory as the input file. Default
-    behavior is to overwrite the infile unless a prefix or suffix is
-    specified.
+    behavior is to overwrite the infile unless outfile or a prefix or
+    suffix is specified.
 
     A note of caution: If overwrite is True and the infile plus a given
     prefix or suffix already exists, that file will be overwritten.
@@ -374,10 +388,15 @@ def recenter_nii(
     ----------
     infile : str
         Path to the input image.
+    outfile : str, optional
+        Path to the output image. If outfile is defined, then prefix and
+        suffix must both be None.
     prefix : str, optional
-        Basename prefix for the output file.
+        Basename prefix for the output file. If prefix is defined, then
+        outfile must be None.
     suffix : str, optional
-        Basename suffix for the output file.
+        Basename suffix for the output file. If suffix is defined, then
+        outfile must be None.
     save_output : bool
         Save the output image.
     overwrite : bool
@@ -394,15 +413,33 @@ def recenter_nii(
     outfile : str
         Output filepath.
     """
-    outfile = strm.add_presuf(infile, prefix, suffix)
-    img_in, dat_in = load_nii(infile)
+    # Load the input image.
+    if isinstance(obj, str):
+        infile = find_gzip(obj)
+        img_in, dat_in = load_nii(infile)
+    elif isinstance(obj, nib.Nifti1Pair):
+        img_in, dat_in = load_nii_flex(obj, **kws)
+        if np.all((outfile is None, prefix is None, suffix is None)):
+            save_output = False
+    else:
+        raise ValueError("obj must be a NIfTI filepath or Nifti1Pair object")
+
+    # Reset origin to center.
     T, R, Z, S = affines.decompose(img_in.affine)
     T_new = (np.asanyarray(img_in.shape[:3]) - 1) * 0.5 * Z
     T_new = np.sign(Z) * -1 * T_new
     aff_new = affines.compose(T_new, R, Z)
     img_out = nib.Nifti1Image(dataobj=dat_in, affine=aff_new)
 
+    # Save the output image.
     if save_output:
+        # Raise an error if outfile is specified along with prefix or suffix.
+        if outfile is None:
+            outfile = strm.add_presuf(infile, prefix, suffix)
+        elif prefix is not None or suffix is not None:
+            raise ValueError(
+                "Either outfile or prefix/suffix can be defined, but not both"
+            )
         if verbose and (overwrite or not op.isfile(outfile)):
             print("Recentering {}".format(op.basename(infile)))
         outfile = save_nii(

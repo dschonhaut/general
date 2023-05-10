@@ -9,3 +9,9 @@ def run_cmd(cmd):
     if output.returncode != 0:
         raise RuntimeError(output.stderr)
     return output
+
+
+def rm_files(topdir):
+    """Remove all files and directories in a directory."""
+    output = run_cmd(f"rm -rf {topdir}/*")
+    return output

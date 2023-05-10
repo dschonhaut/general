@@ -20,19 +20,24 @@ from time import time
 from itertools import chain, zip_longest
 from collections import OrderedDict as od
 import numpy as np
+import pandas as pd
 from scipy.stats import sem
 
 
 class Timer(object):
     """I say how long things take to run."""
 
-    def __init__(self):
+    def __init__(self, msg=None):
         """Start the global timer."""
         self.reset()
+        if msg is None:
+            self.msg = "Ran in "
+        else:
+            self.msg = msg
 
     def __str__(self):
         """Print how long the global timer has been running."""
-        msg = "Ran in {:.1f}s".format(self.check())
+        msg = self.msg + "{:.1f}s".format(self.check())
         return msg
 
     def check(self, reset=False):
@@ -79,15 +84,59 @@ def invert_dict(d):
     return newd
 
 
+def nunique(vals):
+    return len(set(vals))
+
+
+def count_unique(arr):
+    """Return unique arr elements and their counts as a string."""
+    counts = pd.Series(arr).value_counts(dropna=False).sort_index()
+    return ", ".join(["{}: {}".format(k, v) for (k, v) in counts.items()])
+
+
+def quartiles(arr, decimals=1):
+    """Return each quartile of arr as a list."""
+    if decimals == 0:
+        return ", ".join(
+            [
+                str(x)
+                for x in np.round(
+                    np.nanpercentile(arr, [0, 25, 50, 75, 100]), decimals
+                ).astype(int)
+            ]
+        )
+    else:
+        return ", ".join(
+            [
+                str(x)
+                for x in np.round(np.nanpercentile(arr, [0, 25, 50, 75, 100]), decimals)
+            ]
+        )
+
+
 def count_pct(vals, decimals=1):
-    """Return count_nonzero/n (percent)."""
+    """Return count_nonzero/n (percent).
+
+    Drops NaN values from the count.
+    """
     vals = np.array(vals)
+    nan_mask = pd.isna(vals)
+    nan_count = np.count_nonzero(nan_mask)
+    vals = vals[~nan_mask]
+    numer = np.count_nonzero(vals > 0)
+    denom = len(vals)
+    if denom > 0:
+        pct = numer / denom
+    else:
+        pct = 0
     string = "{}/{} ({:.{_}%})".format(
-        np.count_nonzero(vals > 0),
-        len(vals),
-        np.count_nonzero(vals > 0) / len(vals),
+        numer,
+        denom,
+        pct,
         _=decimals,
     )
+    if nan_count > 0:
+        string += " (nan: {})".format(nan_count)
     return string
 
 
