@@ -2,7 +2,6 @@
 
 """
 $ test_if_equal.py img1.nii img2.nii [mask.nii]
-
 """
 
 import sys
@@ -21,10 +20,9 @@ def compare_imgs(img1_path, img2_path, mask=None):
 
     Note: Tests the data arrays for equality, not the image headers!
 
-    Also prints voxelwise difference stats for voxels with nonzero and
-    non-NaN in both images. If a mask is included, only voxels within
-    the mask are included in the equality test and voxelwise difference
-    stats.
+    Also prints voxelwise difference stats for nonzero voxels in both
+    images. If a mask is included, only nonzero voxels within the mask
+    are considered.
 
     Parameters
     ----------
@@ -39,6 +37,7 @@ def compare_imgs(img1_path, img2_path, mask=None):
     # Load the input files into numpy matrices
     dat1 = nops.load_nii_flex(img1_path, dat_only=True, flatten=True)
     dat2 = nops.load_nii_flex(img2_path, dat_only=True, flatten=True)
+    assert dat1.shape == dat2.shape
 
     if mask:
         maskdat = nops.load_nii_flex(mask, dat_only=True, flatten=True, binarize=True)
@@ -57,9 +56,12 @@ def compare_imgs(img1_path, img2_path, mask=None):
     imgs_equal = False
     if np.allclose(dat1, dat2):
         imgs_equal = True
+        return imgs_equal
 
     dat1_mean = dat1.mean()
+    dat1_std = dat1.std()
     dat2_mean = dat2.mean()
+    dat2_std = dat2.std()
     dat1_pcts = []
     dat2_pcts = []
     pcts = [0, 1, 5, 10, 25, 50, 75, 90, 95, 99, 100]
@@ -68,8 +70,10 @@ def compare_imgs(img1_path, img2_path, mask=None):
         dat2_pcts.append(np.percentile(dat2, x))
     dat1_sub_dat2 = dat1 - dat2
     dat1_div_dat2 = dat1 / dat2
-    dat1_sub_dat2_mean = (dat1 - dat2).mean()
-    dat1_div_dat2_mean = (dat1 / dat2).mean()
+    dat1_sub_dat2_mean = dat1_sub_dat2.mean()
+    dat1_sub_dat2_std = dat1_sub_dat2.std()
+    dat1_div_dat2_mean = dat1_div_dat2.mean()
+    dat1_div_dat2_std = dat1_div_dat2.std()
     dat1_sub_dat2_pcts = np.percentile(dat1_sub_dat2, pcts)
     dat1_div_dat2_pcts = np.percentile(dat1_div_dat2, pcts)
     num_nonzero = dat1.size
@@ -79,12 +83,16 @@ def compare_imgs(img1_path, img2_path, mask=None):
     return [
         imgs_equal,
         dat1_mean,
+        dat1_std,
         dat2_mean,
+        dat2_std,
         pcts,
         dat1_pcts,
         dat2_pcts,
         dat1_sub_dat2_mean,
+        dat1_sub_dat2_std,
         dat1_div_dat2_mean,
+        dat1_div_dat2_std,
         dat1_sub_dat2_pcts,
         dat1_div_dat2_pcts,
         n_voxels,
@@ -133,55 +141,82 @@ if __name__ == "__main__":
         mask = None
 
     # Figure out if the images are equal and print the result
-    (
-        imgs_equal,
-        dat1_mean,
-        dat2_mean,
-        pcts,
-        dat1_pcts,
-        dat2_pcts,
-        dat1_sub_dat2_mean,
-        dat1_div_dat2_mean,
-        dat1_sub_dat2_pcts,
-        dat1_div_dat2_pcts,
-        n_voxels,
-        num_nonzero,
-        pct_nonzero,
-        _r,
-        _rho,
-    ) = compare_imgs(img1_path, img2_path, mask)
+    output = compare_imgs(img1_path, img2_path, mask)
+    if isinstance(output, bool):
+        imgs_equal = output
+    else:
+        (
+            imgs_equal,
+            dat1_mean,
+            dat1_std,
+            dat2_mean,
+            dat2_std,
+            pcts,
+            dat1_pcts,
+            dat2_pcts,
+            dat1_sub_dat2_mean,
+            dat1_sub_dat2_std,
+            dat1_div_dat2_mean,
+            dat1_div_dat2_std,
+            dat1_sub_dat2_pcts,
+            dat1_div_dat2_pcts,
+            n_voxels,
+            num_nonzero,
+            pct_nonzero,
+            _r,
+            _rho,
+        ) = output
 
     if imgs_equal:
         if mask:
-            msg = "The image data arrays are equal within the mask."
+            msg = "~ Images are voxelwise identical within the mask ~"
         else:
-            msg = "The image data arrays are equal."
+            msg = "~ Images are voxelwise identical ~"
+        print(
+            "",
+            msg,
+            "",
+            sep="\n",
+            end="\n" * 1,
+        )
     else:
         if mask:
-            msg = "The image data arrays are NOT equal within the mask."
+            msg = "~ Images are NOT equal within the mask ~"
         else:
-            msg = "The image data arrays are NOT equal."
-
-    print(
-        "",
-        msg,
-        "",
-        "nonzero voxels = {:,}/{:,} ({:.2%})".format(
-            num_nonzero, n_voxels, pct_nonzero
-        ),
-        "img1 mean = {:,.4f}".format(dat1_mean),
-        "img2 mean = {:,.4f}".format(dat2_mean),
-        "img1 - img2 mean = {:.4f}".format(dat1_sub_dat2_mean),
-        "img1 / img2 mean = {:.4f}".format(dat1_div_dat2_mean),
-        "pearson = {:.4f}".format(_r),
-        "spearman = {:.4f}".format(_rho),
-        "",
-        "Percentile values...",
-        pd.DataFrame(
-            [dat1_pcts, dat2_pcts, dat1_sub_dat2_pcts, dat1_div_dat2_pcts],
-            columns=pcts,
-            index=["img1", "img2", "img1-img2", "img1/img2"],
-        ).T,
-        sep="\n",
-        end="\n" * 2,
-    )
+            msg = "~ Images are NOT equal ~"
+        print(
+            "",
+            msg,
+            "",
+            "img1 : {}".format(op.basename(img1_path)),
+            "img2 : {}".format(op.basename(img2_path)),
+            "",
+            "Image Stats (img1*img2 nonzero voxels)",
+            "-" * 52,
+            "nonzero voxels       : {:,}/{:,} ({:.2%})".format(
+                num_nonzero, n_voxels, pct_nonzero
+            ),
+            "img1 mean            : {:,.4f}".format(dat1_mean),
+            "img1 std             : {:,.4f}".format(dat1_std),
+            "img2 mean            : {:,.4f}".format(dat2_mean),
+            "img2 std             : {:,.4f}".format(dat2_std),
+            "img1 - img2 mean     : {:.4f}".format(dat1_sub_dat2_mean),
+            "img1 - img2 std      : {:.4f}".format(dat1_sub_dat2_std),
+            "img1 / img2 mean     : {:.4f}".format(dat1_div_dat2_mean),
+            "img1 / img2 std      : {:.4f}".format(dat1_div_dat2_std),
+            "img1 ~ img2 pearson  : {:.4f}".format(_r),
+            "img1 ~ img2 spearman : {:.4f}".format(_rho),
+            "",
+            "Percentiles",
+            "-" * 52,
+            pd.DataFrame(
+                [dat1_pcts, dat2_pcts, dat1_sub_dat2_pcts, dat1_div_dat2_pcts],
+                columns=pcts,
+                index=["img1", "img2", "img1-img2", "img1/img2"],
+            )
+            .round(4)
+            .T,
+            "",
+            sep="\n",
+            end="\n" * 1,
+        )

@@ -939,7 +939,7 @@ if __name__ == "__main__":
         # Run segment
         print(
             "\nSegmenting {} images:\n\t{}".format(
-                len(images), "\n\t".join([op.basename(f) for f in other_images])
+                len(images), "\n\t".join([op.basename(f) for f in images])
             )
         )
         outfiles = spm_segment(images, keep_matf=args.keep_matf)

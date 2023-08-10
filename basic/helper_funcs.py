@@ -97,7 +97,7 @@ def count_unique(arr):
 def quartiles(arr, decimals=1):
     """Return each quartile of arr as a list."""
     if decimals == 0:
-        return ", ".join(
+        output = ", ".join(
             [
                 str(x)
                 for x in np.round(
@@ -106,12 +106,14 @@ def quartiles(arr, decimals=1):
             ]
         )
     else:
-        return ", ".join(
+        output = ", ".join(
             [
                 str(x)
                 for x in np.round(np.nanpercentile(arr, [0, 25, 50, 75, 100]), decimals)
             ]
         )
+    output += " (nan: {})".format(pd.isna(arr).sum())
+    return output
 
 
 def count_pct(vals, decimals=1):
