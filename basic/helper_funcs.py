@@ -1,20 +1,5 @@
 """
-helper_funcs.py
-
-Author
-------
-Daniel Schonhaut
-Computational Memory Lab
-University of Pennsylvania
-daniel.schonhaut@gmail.com
-
-Description
------------
 Helper functions for common tasks with simple python classes.
-
-Last Edited
------------
-3/19/22
 """
 from time import time
 from itertools import chain, zip_longest

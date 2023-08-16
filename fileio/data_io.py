@@ -1,17 +1,5 @@
 """
-data_io.py
-
-Author:
-    Daniel Schonhaut
-    
-Dependencies: 
-    Python 3.6, numpy, scipy, pandas.
-
-Description: 
-    Functions for data input and output.
-
-Last Edited: 
-    11/5/18
+Functions for data input and output.
 """
 import pickle
 

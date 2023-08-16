@@ -1,4 +1,4 @@
-#!/Users/dschonhaut/mambaforge/envs/nipy310/bin/python
+#!/usr/bin/env python
 
 """
 $ test_if_equal.py img1.nii img2.nii [mask.nii]
@@ -10,8 +10,6 @@ import os.path as op
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
-
-sys.path.append(op.join(op.expanduser("~"), "code"))
 import general.nifti.nifti_ops as nops
 
 
@@ -69,17 +67,12 @@ def compare_imgs(img1_path, img2_path, mask=None):
         dat1_pcts.append(np.percentile(dat1, x))
         dat2_pcts.append(np.percentile(dat2, x))
     dat1_sub_dat2 = dat1 - dat2
-    dat1_div_dat2 = dat1 / dat2
     dat1_sub_dat2_mean = dat1_sub_dat2.mean()
     dat1_sub_dat2_std = dat1_sub_dat2.std()
-    dat1_div_dat2_mean = dat1_div_dat2.mean()
-    dat1_div_dat2_std = dat1_div_dat2.std()
     dat1_sub_dat2_pcts = np.percentile(dat1_sub_dat2, pcts)
-    dat1_div_dat2_pcts = np.percentile(dat1_div_dat2, pcts)
     num_nonzero = dat1.size
     pct_nonzero = num_nonzero / n_voxels
     _r = stats.pearsonr(dat1, dat2)[0]
-    _rho = stats.spearmanr(dat1, dat2)[0]
     return [
         imgs_equal,
         dat1_mean,
@@ -91,15 +84,11 @@ def compare_imgs(img1_path, img2_path, mask=None):
         dat2_pcts,
         dat1_sub_dat2_mean,
         dat1_sub_dat2_std,
-        dat1_div_dat2_mean,
-        dat1_div_dat2_std,
         dat1_sub_dat2_pcts,
-        dat1_div_dat2_pcts,
         n_voxels,
         num_nonzero,
         pct_nonzero,
         _r,
-        _rho,
     ]
 
 
@@ -156,15 +145,11 @@ if __name__ == "__main__":
             dat2_pcts,
             dat1_sub_dat2_mean,
             dat1_sub_dat2_std,
-            dat1_div_dat2_mean,
-            dat1_div_dat2_std,
             dat1_sub_dat2_pcts,
-            dat1_div_dat2_pcts,
             n_voxels,
             num_nonzero,
             pct_nonzero,
             _r,
-            _rho,
         ) = output
 
     if imgs_equal:
@@ -192,27 +177,25 @@ if __name__ == "__main__":
             "img2 : {}".format(op.basename(img2_path)),
             "",
             "Image Stats (img1*img2 nonzero voxels)",
-            "-" * 52,
-            "nonzero voxels       : {:,}/{:,} ({:.2%})".format(
+            "-" * 47,
+            "nonzero voxels : {:,}/{:,} ({:.2%})".format(
                 num_nonzero, n_voxels, pct_nonzero
             ),
-            "img1 mean            : {:,.4f}".format(dat1_mean),
-            "img1 std             : {:,.4f}".format(dat1_std),
-            "img2 mean            : {:,.4f}".format(dat2_mean),
-            "img2 std             : {:,.4f}".format(dat2_std),
-            "img1 - img2 mean     : {:.4f}".format(dat1_sub_dat2_mean),
-            "img1 - img2 std      : {:.4f}".format(dat1_sub_dat2_std),
-            "img1 / img2 mean     : {:.4f}".format(dat1_div_dat2_mean),
-            "img1 / img2 std      : {:.4f}".format(dat1_div_dat2_std),
-            "img1 ~ img2 pearson  : {:.4f}".format(_r),
-            "img1 ~ img2 spearman : {:.4f}".format(_rho),
+            "img1           : {:,.4f} ± {:,.4f} (mean ± stdev)".format(
+                dat1_mean, dat1_std
+            ),
+            "img2           : {:,.4f} ± {:,.4f}".format(dat2_mean, dat2_std),
+            "img1 - img2    : {:.4f} ± {:,.4f}".format(
+                dat1_sub_dat2_mean, dat1_sub_dat2_std
+            ),
+            "img1 ~ img2    : r = {:.4f}".format(_r),
             "",
             "Percentiles",
-            "-" * 52,
+            "-" * 47,
             pd.DataFrame(
-                [dat1_pcts, dat2_pcts, dat1_sub_dat2_pcts, dat1_div_dat2_pcts],
+                [dat1_pcts, dat2_pcts, dat1_sub_dat2_pcts],
                 columns=pcts,
-                index=["img1", "img2", "img1-img2", "img1/img2"],
+                index=["img1", "img2", "img1-img2"],
             )
             .round(4)
             .T,

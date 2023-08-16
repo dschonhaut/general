@@ -1,9 +1,7 @@
 import sys
 import os.path as op
-
-sys.path.append(op.join(op.expanduser("~"), "code"))
-import general.nifti.nifti_ops as nops
 import general.basic.str_methods as strm
+import general.nifti.nifti_ops as nops
 import general.osops.os_utils as osu
 
 

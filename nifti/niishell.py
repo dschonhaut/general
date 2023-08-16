@@ -1,8 +1,5 @@
-import sys
 import os.path as op
 import subprocess
-
-sys.path.append()
 import general.nifti.nifti_ops as nops
 import general.basic.str_methods as strm
 

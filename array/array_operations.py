@@ -1,17 +1,5 @@
 """
-array_operations.py
-
-Author:
-    Daniel Schonhaut
-    Computational Memory Lab
-    University of Pennsylvania
-    daniel.schonhaut@gmail.com
-
-Description:
-    Functions for indexing and operating on arrays.
-
-Last Edited:
-    7/9/20
+Functions for indexing and operating on arrays.
 """
 import numpy as np
 import pandas as pd

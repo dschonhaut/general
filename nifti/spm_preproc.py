@@ -1,4 +1,4 @@
-#!/Users/dschonhaut/mambaforge/envs/nipy310/bin/python
+#!/usr/bin/env python
 
 """
 spm_preproc.py
@@ -13,38 +13,10 @@ import os
 import os.path as op
 import argparse
 import shutil
-
-sys.path.append(op.join(op.expanduser("~"), "code"))
-from general.basic.helper_funcs import Timer
-import general.nifti.nifti_ops as nops
 import numpy as np
 import nipype.interfaces.spm as spm
-
-
-def recenter(images, prefix=None, suffix=None):
-    """Recenter nifti images in the center of the voxel grid.
-
-    This process involves rewriting the image header and does not affect
-    the underlying image data, nor use Matlab/SPM (just Python).
-
-    Images are rewritten inplace if no prefix or suffix is specified.
-
-    Parameters
-    ----------
-    images : str or list
-        Path to the image file or list of image files to recenter.
-    prefix : str
-        Prefix to use for the output file names.
-    suffix : str
-        Suffix to use for the output file names.
-    """
-    if isinstance(images, str):
-        images = [images]
-    outfiles = []
-    for image in images:
-        *_, outfile = nops.recenter_nii(image, prefix=prefix, suffix=suffix)
-        outfiles.append(outfile)
-    return outfiles
+from general.basic.helper_funcs import Timer
+import general.nifti.nifti_ops as nops
 
 
 def spm_coregister(
@@ -410,35 +382,6 @@ def _parse_args():
         dest="job", metavar="JOB", help="The SPM job to perform"
     )
 
-    # Recenter
-    parser_recenter = subparsers.add_parser(
-        "recenter",
-        help="Recenter (all in Python; no call to SPM)",
-        formatter_class=TextFormatter,
-        epilog="Examples:\n" + examples["recenter"],
-    )
-    parser_recenter.add_argument(
-        "-i",
-        "--images",
-        required=True,
-        type=str,
-        nargs="+",
-        help="Paths to 1+ images to smooth",
-    )
-    parser_recenter.add_argument(
-        "-p",
-        "--prefix",
-        default=None,
-        type=str,
-        help="Output file prefix. Default: %(default)s",
-    )
-    parser_recenter.add_argument(
-        "--suffix",
-        default=None,
-        type=str,
-        help="Output file suffix. Default: %(default)s",
-    )
-
     # Coregister
     parser_coreg = subparsers.add_parser(
         "coreg",
@@ -642,9 +585,38 @@ def _parse_args():
         help="Recenter input images before running SPM.",
     )
 
+    # Recenter
+    parser_recenter = subparsers.add_parser(
+        "recenter",
+        help="Recenter (all in Python; no call to SPM)",
+        formatter_class=TextFormatter,
+        epilog="Examples:\n" + examples["recenter"],
+    )
+    parser_recenter.add_argument(
+        "-i",
+        "--images",
+        required=True,
+        type=str,
+        nargs="+",
+        help="Paths to 1+ images to smooth",
+    )
+    parser_recenter.add_argument(
+        "-p",
+        "--prefix",
+        default=None,
+        type=str,
+        help="Output file prefix. Default: %(default)s",
+    )
+    parser_recenter.add_argument(
+        "--suffix",
+        default=None,
+        type=str,
+        help="Output file suffix. Default: %(default)s",
+    )
+
     # Segment
     parser_seg = subparsers.add_parser(
-        "seg",
+        "segment",
         help="Segment",
         formatter_class=TextFormatter,
         epilog="Examples:\n" + examples["seg"],
@@ -765,13 +737,6 @@ def _parse_args():
 
 def _get_examples():
     examples = {
-        "recenter": """
-  Recenter image1.nii and overwrite the original file header:
-    $ spm recenter -i image1.nii
-
-  Recenter *.nii images in the current directory and save new files with the prefix 'r':
-    $ spm recenter -i *.nii -p r
-    """,
         "coreg": """
   Coregister (estimate & reslice) source.nii to target.nii:
     $ spm coreg -s source.nii -t target.nii
@@ -796,12 +761,19 @@ def _get_examples():
         "realign": """
   [Add realign examples here.]
   """,
+        "recenter": """
+  Recenter image1.nii and overwrite the original file header:
+    $ spm recenter -i image1.nii
+
+  Recenter *.nii images in the current directory and save new files with the prefix 'r':
+    $ spm recenter -i *.nii -p r
+    """,
         "seg": """
   Segment image1.nii:
-    $ spm seg -i image1.nii
+    $ spm segment -i image1.nii
 
   Segment image1.nii, image2.nii, and image3.nii:
-    $ spm seg -i image{1..3}.nii
+    $ spm segment -i image{1..3}.nii
   """,
         "smooth": """
   Smooth image1.nii by 4.5 mm^3:
@@ -812,11 +784,11 @@ def _get_examples():
   """,
     }
     examples["all"] = (
-        examples["recenter"]
-        + examples["coreg"]
+        examples["coreg"]
         + examples["norm8"]
         + examples["norm"]
         + examples["realign"]
+        + examples["recenter"]
         + examples["seg"]
         + examples["smooth"]
     )
@@ -868,11 +840,10 @@ if __name__ == "__main__":
     # --------
     if args.job == "recenter":
         # Get command line parameters
-        images = [nops.gunzip_nii(op.abspath(f)) for f in args.images]
+        images = [nops.find_gzip(op.abspath(f)) for f in args.images]
 
         # Run recenter
-        for image in images:
-            _ = nops.recenter_nii(image, prefix=args.prefix, suffix=args.suffix)
+        _ = nops.recenter_niis(images, prefix=args.prefix, suffix=args.suffix)
         print("", timer, sep="\n", end="\n" * 2)
 
     # Coregister
@@ -889,8 +860,8 @@ if __name__ == "__main__":
 
         # Optionally recenter
         if args.recenter:
-            for image in [source] + other_images:
-                _ = nops.recenter_nii(image)
+            images = [source] + other_images
+            _ = nops.recenter_niis(images)
 
         # Run coreg
         jobtype_fancy = {
@@ -928,13 +899,12 @@ if __name__ == "__main__":
 
     # Segment
     # -------
-    elif args.job == "seg":
+    elif args.job == "segment":
         images = [nops.gunzip_nii(op.abspath(f)) for f in args.images]
 
         # Optionally recenter
         if args.recenter:
-            for image in images:
-                _ = nops.recenter_nii(image)
+            _ = nops.recenter_niis(images)
 
         # Run segment
         print(
@@ -942,7 +912,7 @@ if __name__ == "__main__":
                 len(images), "\n\t".join([op.basename(f) for f in images])
             )
         )
-        outfiles = spm_segment(images, keep_matf=args.keep_matf)
+        _ = spm_segment(images, keep_matf=args.keep_matf)
         print("", timer, sep="\n", end="\n" * 2)
 
     # Smooth
@@ -952,8 +922,7 @@ if __name__ == "__main__":
 
         # Optionally recenter
         if args.recenter:
-            for image in images:
-                _ = nops.recenter_nii(image)
+            _ = nops.recenter_niis(images)
 
         # Run smooth
         if args.fwhm:
