@@ -609,15 +609,21 @@ def create_suvr(
         return suvr_img, suvr_dat
 
 
-def roi_desc(dat, rois, aggf=np.mean, conv_nan=0):
+def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
     """Apply `aggf` over `dat` values within each ROI mask.
 
     Parameters
     ----------
     dat :
         Filepath string, nifti image, or array-like object.
-    rois : dict, {str: obj}
-        Map each ROI name to its filepath string, nifti image, or array.
+    rois : str, list[str], or dict-like {str: obj}
+        Map each ROI name to its filepath string(s), nifti image, or
+        array.
+    subrois : dict of {str: int or list}
+        Map each sub-ROI within the main ROI mask to a value or list of
+        mask values that comprise it. The classic example is of an
+        aparc+aseg file containing multiple regions with different
+        labels. Note: subrois cannot be passed if len(rois) > 1.
     aggf : function, list of functions, or dict of functions
         Function or functions to apply over `dat` values within each
         ROI.
@@ -627,31 +633,60 @@ def roi_desc(dat, rois, aggf=np.mean, conv_nan=0):
 
     Returns
     -------
-    grouped : Series or DataFrame
+    output : DataFrame
         `aggf` output for each agg function, for each ROI. Index is the
-        ROI names, columns are the function names.
+        ROI names, columns are the function names. The last column is
+        ROI volume (number of voxels in the mask).
     """
-    dat = load_nii_flex(dat, dat_only=True, conv_nan=conv_nan)
+    if (not isinstance(rois, str)) and (len(rois) > 1) and (subrois is not None):
+        raise ValueError("Cannot define multiple rois and subrois")
 
-    if isfunction(aggf):
-        grouped = pd.Series(dtype=np.float32, name=aggf.__name__)
-        for roi, roi_mask in rois.items():
-            mask = load_nii_flex(roi_mask, dat_only=True, binarize=True)
-            assert dat.shape == mask.shape
-            mask_idx = np.where(mask)
-            grouped[roi] = aggf(dat[mask_idx])
+    # Load the data array.
+    dat = load_nii_flex(dat, dat_only=True, flatten=True, conv_nan=conv_nan)
+
+    # Format the ROIs to be dict-like.
+    if isinstance(rois, str):
+        rois = od({op.basename(rois).split(".")[0]: rois})
+    elif isinstance(rois, (list, tuple)):
+        rois = od({op.basename(roi).split(".")[0]: roi for roi in rois})
+    elif hasattr(rois, "keys"):
+        pass
     else:
-        if not isinstance(aggf, dict):
-            aggf = od({func.__name__: func for func in aggf})
-        grouped = pd.DataFrame(index=list(rois.keys()), columns=list(aggf.keys()))
-        for roi, roi_mask in rois.items():
-            mask = load_nii_flex(roi_mask, dat_only=True, binarize=True)
+        raise ValueError("rois must be str, list, tuple, or dict-like")
+
+    # Format the aggregation functions to be dict-like.
+    if isfunction(aggf):
+        aggf = od({aggf.__name__: aggf})
+    elif not isinstance(aggf, dict):
+        aggf = od({func.__name__: func for func in aggf})
+
+    # Prepare the output DataFrame.
+    if subrois:
+        output_idx = list(subrois.keys())
+    else:
+        output_idx = list(rois.keys())
+    output_cols = list(aggf.keys()) + ["voxels"]
+    output = pd.DataFrame(index=output_idx, columns=output_cols)
+
+    # Loop over the ROIs and sub-ROIs.
+    for roi, roi_mask in rois.items():
+        if subrois:
+            mask = load_nii_flex(roi_mask, dat_only=True, flatten=True, binarize=False)
+            assert dat.shape == mask.shape
+            for subroi, subroi_vals in subrois.items():
+                mask_idx = np.where(np.isin(mask, subroi_vals))
+                for func_name, func in aggf.items():
+                    output.at[subroi, func_name] = func(dat[mask_idx])
+                output.at[subroi, "voxels"] = mask_idx[0].size
+        else:
+            mask = load_nii_flex(roi_mask, dat_only=True, flatten=True, binarize=True)
             assert dat.shape == mask.shape
             mask_idx = np.where(mask)
             for func_name, func in aggf.items():
-                grouped.at[roi, func_name] = func(dat[mask_idx])
+                output.at[roi, func_name] = func(dat[mask_idx])
+            output.at[subroi, "voxels"] = mask_idx[0].size
 
-    return grouped
+    return output
 
 
 def calc_3d_smooth(res_in, res_target, squeeze=False, verbose=False):
