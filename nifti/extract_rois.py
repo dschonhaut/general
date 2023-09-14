@@ -54,7 +54,7 @@ def _parse_args():
     parser.add_argument(
         "rois",
         type=str,
-        nargs="+",
+        nargs="*",
         default=None,
         help="Names of ROIs to extract values from",
     )
