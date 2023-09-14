@@ -100,7 +100,7 @@ if __name__ == "__main__":
                 keep_rois[roi] = all_rois[roi]
 
     # Extract ROI values.
-    output = nops.roi_desc(dat=args.pet, rois=args.aparc, sub_rois=keep_rois)
+    output = nops.roi_desc(dat=args.pet, rois=args.aparc, subrois=keep_rois)
 
     # Print output.
     print("PET: {}".format(args.pet))
