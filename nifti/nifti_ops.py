@@ -655,7 +655,11 @@ def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
         raise ValueError("rois must be str, list, tuple, or dict-like")
 
     # Format the aggregation functions to be dict-like.
+    print("aggf is a function: {}".format(isfunction(aggf)))
+    print("type(aggf): {}".format(type(aggf)))
     if isfunction(aggf):
+        print("hello")
+
         aggf = od({aggf.__name__: aggf})
     elif not isinstance(aggf, dict):
         aggf = od({func.__name__: func for func in aggf})
