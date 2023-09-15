@@ -684,7 +684,7 @@ def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
             mask_idx = np.where(mask)
             for func_name, func in aggf.items():
                 output.at[roi, func_name] = func(dat[mask_idx])
-            output.at[subroi, "voxels"] = mask_idx[0].size
+            output.at[roi, "voxels"] = mask_idx[0].size
 
     return output
 

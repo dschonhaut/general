@@ -5,8 +5,6 @@ $ extract_rois.py [pet.nii] [aparc+aseg.nii] [roi1 roi2 ...]
 """
 
 import sys
-import os
-import os.path as op
 import argparse
 import general.nifti.nifti_ops as nops
 
@@ -55,7 +53,6 @@ def _parse_args():
         "rois",
         type=str,
         nargs="*",
-        default=None,
         help="Names of ROIs to extract values from",
     )
     args = parser.parse_args()
@@ -90,7 +87,7 @@ if __name__ == "__main__":
     # Get ROIs.
     all_rois = roi_map()
     keep_rois = {}
-    if args.rois is None:
+    if len(args.rois) == 0:
         keep_rois = all_rois
     else:
         for roi in args.rois:
@@ -98,12 +95,12 @@ if __name__ == "__main__":
                 print(f"{roi} not in the ROI dictionary")
             else:
                 keep_rois[roi] = all_rois[roi]
-
     # Extract ROI values.
     output = nops.roi_desc(dat=args.pet, rois=args.aparc, subrois=keep_rois)
 
     # Print output.
     print("PET: {}".format(args.pet))
     print("aparc+aseg: {}".format(args.aparc))
+    print("-" * 60)
     print(output, end="\n" * 2)
     sys.exit(0)
