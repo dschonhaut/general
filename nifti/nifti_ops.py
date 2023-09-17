@@ -655,26 +655,23 @@ def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
         raise ValueError("rois must be str, list, tuple, or dict-like")
 
     # Format the aggregation functions to be dict-like.
-    print("aggf is a function: {}".format(isfunction(aggf)))
-    print("type(aggf): {}".format(type(aggf)))
     if isfunction(aggf):
-        print("hello")
-
         aggf = od({aggf.__name__: aggf})
     elif not isinstance(aggf, dict):
         aggf = od({func.__name__: func for func in aggf})
 
     # Prepare the output DataFrame.
-    if subrois:
+    if subrois is not None:
         output_idx = list(subrois.keys())
     else:
         output_idx = list(rois.keys())
     output_cols = list(aggf.keys()) + ["voxels"]
     output = pd.DataFrame(index=output_idx, columns=output_cols)
+    output = output.rename_axis("roi")
 
     # Loop over the ROIs and sub-ROIs.
     for roi, roi_mask in rois.items():
-        if subrois:
+        if subrois is not None:
             mask = load_nii_flex(roi_mask, dat_only=True, flatten=True, binarize=False)
             assert dat.shape == mask.shape
             for subroi, subroi_vals in subrois.items():
