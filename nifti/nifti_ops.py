@@ -3,7 +3,7 @@ import os.path as op
 import gzip
 import shutil
 import warnings
-from inspect import isfunction
+from inspect import isroutine
 from collections import OrderedDict as od
 import numpy as np
 import pandas as pd
@@ -655,7 +655,7 @@ def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
         raise ValueError("rois must be str, list, tuple, or dict-like")
 
     # Format the aggregation functions to be dict-like.
-    if isfunction(aggf):
+    if isroutine(aggf):
         aggf = od({aggf.__name__: aggf})
     elif not isinstance(aggf, dict):
         aggf = od({func.__name__: func for func in aggf})

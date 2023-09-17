@@ -8,7 +8,7 @@ $ extract_rois.py -i [pet1.nii pet2.nii ...] -a [aparc+aseg1.nii aparc+aseg2.nii
 
 import sys
 import os.path as op
-import pkg_resources as pkgrs
+import importlib.resources
 import argparse
 from collections import OrderedDict as od
 import numpy as np
@@ -108,12 +108,12 @@ console (-q|--quiet).
         "-f",
         "--roi_file",
         type=str,
-        default=pkgrs.resource_filename("general.nifti", "fsroi_list.csv"),
+        default=str(importlib.resources.path("general.nifti", "fsroi_list.csv")),
         help=(
             "Path to the 2-column CSV file with ROI names and int or\n"
             + "semicolon-separated labels\n"
             + "(default: {})".format(
-                pkgrs.resource_filename("general.nifti", "fsroi_list.csv")
+                str(importlib.resources.path("general.nifti", "fsroi_list.csv"))
             )
         ),
     )
