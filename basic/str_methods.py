@@ -2,6 +2,7 @@
 String manipulation methods.
 """
 import os.path as op
+from glob import glob
 
 
 def add_presuf(infile, prefix=None, suffix=None):
@@ -79,3 +80,16 @@ def strip_space(in_str):
         out_str = out_str.replace(search_str, " ")
 
     return out_str
+
+
+def glob_sort_mtime(pattern):
+    """Return files matching pattern in most recent modified order.
+
+    Returns
+    -------
+    files : list of str
+        List of files matching pattern, sorted by most recent modified
+        (files[0] is the most recently modified).
+    """
+    files = sorted(glob(pattern), key=op.getmtime, reverse=True)
+    return files
