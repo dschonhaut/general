@@ -2,6 +2,7 @@
 Helper functions for common tasks with simple python classes.
 """
 from time import time
+import datetime
 from itertools import chain, zip_longest
 from collections import OrderedDict as od
 import numpy as np
@@ -52,6 +53,16 @@ class Timer(object):
         self.start = time()
 
 
+def today():
+    """Return today's date like YYYY-MM-DD."""
+    return datetime.date.today().strftime("%Y-%m-%d")
+
+
+def now():
+    """Return the current date and time down to seconds."""
+    return datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+
 def weave(l1, l2):
     """Interleave two lists of same or different lengths."""
     return [x for x in chain(*zip_longest(l1, l2)) if x is not None]
@@ -59,7 +70,7 @@ def weave(l1, l2):
 
 def invert_dict(d):
     """Invert a dictionary of string keys and list values."""
-    if type(d) == dict:
+    if isinstance(d, dict):
         newd = {}
     else:
         newd = od([])
