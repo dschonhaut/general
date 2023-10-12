@@ -148,7 +148,13 @@ def load_rois(roi_file):
     """Load dictionary of ROI names to lists of 1+ int labels."""
     rois = pd.read_csv(roi_file)
     rois = od(zip(rois.iloc[:, 0], rois.iloc[:, 1]))
-    rois = {k: list(np.unique([int(x) for x in v.split(";")])) for k, v in rois.items()}
+    try:
+        rois = {
+            k: list(np.unique([int(x) for x in v.split(";")])) for k, v in rois.items()
+        }
+    except AttributeError:
+        pass
+    rois = pd.Series(rois)
     rois = pd.Series(rois)
     return rois
 
