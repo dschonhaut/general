@@ -11,7 +11,7 @@ import general.basic.str_methods as strm
 import general.nifti.nifti_ops as nops
 
 mpl.rcParams["pdf.fonttype"] = 42
-
+mpl.rcParams['font.sans-serif'] = "Arial"
 
 def create_multislice(
     imagef,
@@ -33,6 +33,7 @@ def create_multislice(
     autoscale_min_pct=0.5,
     autoscale_max_pct=99.5,
     crop=True,
+    mask_thresh=None,
     crop_prop=0.05,
     annotate=False,
     draw_cross=False,
@@ -131,6 +132,10 @@ def create_multislice(
     crop : bool, default : True
         If True, the code attempts to crop the image to remove empty
         space around the edges.
+    mask_thresh : float, default : None
+        Cropping threshold for the first image; used together with
+        crop_prop to determine how aggresively to remove planes of
+        mostly empty space around the image.
     crop_prop : float, default : 0.05
         The cropping threshold for removing empty space around the edges
         of the image.
@@ -303,7 +308,9 @@ def create_multislice(
     # Crop the data array.
     img, dat = nops.load_nii(imagef, **kws)
     if crop:
-        mask = dat > (vmin * 2)
+        if mask_thresh is None:
+            mask_thresh = vmin * 2
+        mask = dat > mask_thresh
         dat = aop.crop_arr3d(dat, mask, crop_prop)
         img = nib.Nifti1Image(dat, img.affine)
         img, *_ = nops.recenter_nii(img)
@@ -1066,7 +1073,8 @@ def nih_cmap():
             [0.625, 255, 255, 0],
             [0.75, 255, 85, 0],
             [0.85, 255, 0, 0],
-            [1.0, 172, 0, 0],
+            [0.99608, 172, 0, 0],
+            [1, 140, 0, 0],
         ]
     )
     color_list[:, 1:] = color_list[:, 1:] / 255
