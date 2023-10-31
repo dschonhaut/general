@@ -3,12 +3,14 @@ import os.path as op
 import gzip
 import shutil
 import warnings
+from glob import glob
 from inspect import isroutine
 from collections import OrderedDict as od
 import numpy as np
 import pandas as pd
 import nibabel as nib
 import transforms3d.affines as affines
+import general.osops.os_utils as osu
 import general.basic.str_methods as strm
 
 
@@ -211,6 +213,18 @@ def save_nii(img, dat, outfile, overwrite=False, verbose=True):
         return outfile
     else:
         return None
+
+
+def dcm2niix(dcm_dir, remove_dicoms=False):
+    """Run dcm2niix on dcm_dir and return the recon'd nifti path(s)."""
+    cmd = "dcm2niix {}".format(dcm_dir)
+    osu.run_cmd(cmd)
+    niftis = glob(op.join(dcm_dir, "*.nii*"))
+    if remove_dicoms:
+        dicoms = glob(op.join(dcm_dir, "*.dcm"))
+        for dcm in dicoms:
+            os.remove(dcm)
+    return niftis
 
 
 def find_gzip(infile, raise_error=False, return_infile=False):
