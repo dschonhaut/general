@@ -11,7 +11,6 @@ import general.basic.str_methods as strm
 import general.nifti.nifti_ops as nops
 
 mpl.rcParams["pdf.fonttype"] = 42
-mpl.rcParams['font.sans-serif'] = "Arial"
 
 def create_multislice(
     imagef,
