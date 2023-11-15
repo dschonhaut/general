@@ -11,6 +11,8 @@ import general.basic.str_methods as strm
 import general.nifti.nifti_ops as nops
 
 mpl.rcParams["pdf.fonttype"] = 42
+# mpl.rcParams['font.sans-serif'] = "Arial"
+
 
 def create_multislice(
     imagef,
@@ -32,7 +34,7 @@ def create_multislice(
     autoscale_min_pct=0.5,
     autoscale_max_pct=99.5,
     crop=True,
-    mask_thresh=None,
+    mask_thresh=0.05,
     crop_prop=0.05,
     annotate=False,
     draw_cross=False,
@@ -220,6 +222,7 @@ def create_multislice(
     tracer_labels = {
         "fbb": "[18F]Florbetaben",
         "fbp": "[18F]Florbetapir",
+        "nav": "[18F]NAV4694",
         "pib": "[11C]PIB",
         "ftp": "[18F]Flortaucipir",
         "fdg": "[18F]FDG",
@@ -256,7 +259,18 @@ def create_multislice(
             facecolor = "w"
         if fontcolor is None:
             fontcolor = "k"
-    if tracer == "pib":
+    elif tracer == "nav":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    elif tracer == "pib":
         if vmin is None:
             vmin = 0
         if vmax is None:
@@ -466,8 +480,8 @@ def create_2multislice(
     autoscale_max_pct=99.5,
     img1_crop=True,
     img2_crop=True,
-    img1_mask_thresh=None,
-    img2_mask_thresh=None,
+    img1_mask_thresh=0.05,
+    img2_mask_thresh=0.05,
     img1_crop_prop=0.05,
     img2_crop_prop=0.05,
     img1_annotate=False,
