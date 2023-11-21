@@ -23,7 +23,16 @@ class Timer(object):
 
     def __str__(self):
         """Print how long the global timer has been running."""
-        msg = self.msg + "{:.1f}s".format(self.check())
+        elapsed = self.check()
+        hours = int(elapsed / 3600)
+        minutes = int((elapsed % 3600) / 60)
+        seconds = elapsed % 60
+        if hours > 0:
+            msg = self.msg + "{}h, {}m and {:.3f}s".format(hours, minutes, seconds)
+        elif minutes > 0:
+            msg = self.msg + "{}m and {:.3f}s".format(minutes, seconds)
+        else:
+            msg = self.msg + "{:.3f}s".format(seconds)
         return msg
 
     def check(self, reset=False):
