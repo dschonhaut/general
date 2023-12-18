@@ -214,20 +214,20 @@ if __name__ == "__main__":
             "* nonzero voxels   : {:,}/{:,} ({:.2%})".format(
                 output["num_nonzero"], output["n_voxels"], output["pct_nonzero"]
             ),
-            "* img1             : {:,.6f} ± {:,.6f} (M ± SD)".format(
+            "* img1             : {:,.8f} ± {:,.8f} (M ± SD)".format(
                 output["dat1_mean"], output["dat1_std"]
             ),
-            "* img2             : {:,.6f} ± {:,.6f}".format(
+            "* img2             : {:,.8f} ± {:,.8f}".format(
                 output["dat2_mean"], output["dat2_std"]
             ),
-            "* img1 - img2      : {:.6f} ± {:,.6f}".format(
+            "* img1 - img2      : {:.8f} ± {:,.8f}".format(
                 output["dat1_sub_dat2_mean"], output["dat1_sub_dat2_std"]
             ),
-            "* |img1 - img2|    : {:.6f} ± {:,.6f}".format(
+            "* |img1 - img2|    : {:.8f} ± {:,.8f}".format(
                 output["dat1_sub_dat2_abs_mean"], output["dat1_sub_dat2_abs_std"]
             ),
-            "* img1 - img2 RMSE : {:.6f}".format(output["dat1_sub_dat2_rmse"]),
-            "* img1 ~ img2      : r = {:.6f}".format(output["_r"]),
+            "* img1 - img2 RMSE : {:.8f}".format(output["dat1_sub_dat2_rmse"]),
+            "* img1 ~ img2      : r = {:.8f}".format(output["_r"]),
             "",
             "Percentiles",
             "-" * 30,
@@ -241,7 +241,7 @@ if __name__ == "__main__":
                 columns=output["pcts"],
                 index=["img1", "img2", "img1-img2", "|img1-img2|"],
             )
-            .round(6)
+            .round(8)
             .T,
             "",
             sep="\n",
