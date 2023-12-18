@@ -34,7 +34,7 @@ def compare_imgs(img1_path, img2_path, mask=None):
     output = {}
 
     # Test equality of the affine transforms
-    if np.allclose(img1.affine, img2.affine):
+    if np.allclose(img1.affine, img2.affine, equal_nan=True):
         output["affines_equal"] = True
     else:
         output["affines_equal"] = False
@@ -59,7 +59,7 @@ def compare_imgs(img1_path, img2_path, mask=None):
     dat2 = dat2[nonzero_voxels]
 
     # Test equality of the data arrays
-    if np.allclose(dat1, dat2):
+    if np.allclose(dat1, dat2, equal_nan=True):
         output["arrays_equal"] = True
     else:
         output["arrays_equal"] = False
@@ -80,9 +80,15 @@ def compare_imgs(img1_path, img2_path, mask=None):
         output["dat1_pcts"].append(np.percentile(dat1, x))
         output["dat2_pcts"].append(np.percentile(dat2, x))
     dat1_sub_dat2 = dat1 - dat2
+    dat1_sub_dat2_abs = np.abs(dat1_sub_dat2)
+    dat1_sub_dat2_rmse = np.sqrt(np.mean(dat1_sub_dat2**2))
     output["dat1_sub_dat2_mean"] = dat1_sub_dat2.mean()
     output["dat1_sub_dat2_std"] = dat1_sub_dat2.std()
+    output["dat1_sub_dat2_abs_mean"] = dat1_sub_dat2_abs.mean()
+    output["dat1_sub_dat2_abs_std"] = dat1_sub_dat2_abs.std()
+    output["dat1_sub_dat2_rmse"] = dat1_sub_dat2_rmse
     output["dat1_sub_dat2_pcts"] = np.percentile(dat1_sub_dat2, output["pcts"])
+    output["dat1_sub_dat2_abs_pcts"] = np.percentile(dat1_sub_dat2_abs, output["pcts"])
     output["num_nonzero"] = dat1.size
     output["pct_nonzero"] = output["num_nonzero"] / output["n_voxels"]
     output["_r"] = stats.pearsonr(dat1, dat2)[0]
@@ -205,19 +211,23 @@ if __name__ == "__main__":
             msg,
             "",
             "Image Stats (img1*img2 nonzero voxels)",
-            "* nonzero voxels : {:,}/{:,} ({:.2%})".format(
+            "* nonzero voxels   : {:,}/{:,} ({:.2%})".format(
                 output["num_nonzero"], output["n_voxels"], output["pct_nonzero"]
             ),
-            "* img1           : {:,.4f} ± {:,.4f} (M ± SD)".format(
+            "* img1             : {:,.6f} ± {:,.6f} (M ± SD)".format(
                 output["dat1_mean"], output["dat1_std"]
             ),
-            "* img2           : {:,.4f} ± {:,.4f}".format(
+            "* img2             : {:,.6f} ± {:,.6f}".format(
                 output["dat2_mean"], output["dat2_std"]
             ),
-            "* img1 - img2    : {:.4f} ± {:,.4f}".format(
+            "* img1 - img2      : {:.6f} ± {:,.6f}".format(
                 output["dat1_sub_dat2_mean"], output["dat1_sub_dat2_std"]
             ),
-            "* img1 ~ img2    : r = {:.4f}".format(output["_r"]),
+            "* |img1 - img2|    : {:.6f} ± {:,.6f}".format(
+                output["dat1_sub_dat2_abs_mean"], output["dat1_sub_dat2_abs_std"]
+            ),
+            "* img1 - img2 RMSE : {:.6f}".format(output["dat1_sub_dat2_rmse"]),
+            "* img1 ~ img2      : r = {:.6f}".format(output["_r"]),
             "",
             "Percentiles",
             "-" * 30,
@@ -226,11 +236,12 @@ if __name__ == "__main__":
                     output["dat1_pcts"],
                     output["dat2_pcts"],
                     output["dat1_sub_dat2_pcts"],
+                    output["dat1_sub_dat2_abs_pcts"],
                 ],
                 columns=output["pcts"],
-                index=["img1", "img2", "img1-img2"],
+                index=["img1", "img2", "img1-img2", "|img1-img2|"],
             )
-            .round(4)
+            .round(6)
             .T,
             "",
             sep="\n",

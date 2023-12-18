@@ -1,11 +1,17 @@
+#!/usr/bin/env python
+
+import sys
 import os.path as op
 import warnings
+import argparse
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import seaborn as sns
+from matplotlib.backends.backend_pdf import PdfPages
 import nibabel as nib
 from nilearn import plotting
+from style import custom_colormaps
+from general.basic.helper_funcs import *
 import general.array.array_operations as aop
 import general.basic.str_methods as strm
 import general.nifti.nifti_ops as nops
@@ -74,7 +80,7 @@ def create_multislice(
     title : str, optional
         The figure title.
     display_mode : str, default : 'z'
-        The direction of slice cuts (see nilearn.plotting.plot_anat):
+        The direction of slice cuts (see nilearn.plotting.plot_img):
         - 'x': sagittal
         - 'y': coronal
         - 'z': axial
@@ -83,7 +89,7 @@ def create_multislice(
         - 'mosaic': 3 cuts are performed along multiple rows and columns
     cut_coords : list, default : [-50, -38, -26, -14, -2, 10, 22, 34]
         The MNI coordinates of the point where the cut is performed
-        (see nilearn.plotting.plot_anat):
+        (see nilearn.plotting.plot_img):
         - If display_mode is 'ortho' or 'tiled', this should be a
           3-tuple: (x, y, z)
         - For display_mode == 'x', 'y', or 'z', then these are the
@@ -177,6 +183,8 @@ def create_multislice(
 
     Returns
     -------
+    fig : matplotlib.figure.Figure
+        The figure object.
     outfile : str
         The path to the saved file (or None if save_fig is False and
         outfile does not already exist).
@@ -197,8 +205,7 @@ def create_multislice(
             )
         return outfile
     # Check that the image file exists.
-    else:
-        _ = nops.find_gzip(imagef, raise_error=True)
+    nops.find_gzip(imagef, raise_error=True)
 
     # Configure plot parameters.
 
@@ -214,109 +221,16 @@ def create_multislice(
         if vmax is None:
             vmax = np.percentile(dat, autoscale_max_pct)
 
-    # Set plot parameters based on tracer if the tracer is known to this
-    # script and if the parameters have not already been set. If the
-    # tracer is not defined, or not known and can't be inferred from
-    # the image filename, then any undefined parameters are set to the
-    # default values shown at the bottom of this section.
-    tracer_labels = {
-        "fbb": "[18F]Florbetaben",
-        "fbp": "[18F]Florbetapir",
-        "nav": "[18F]NAV4694",
-        "pib": "[11C]PIB",
-        "ftp": "[18F]Flortaucipir",
-        "fdg": "[18F]FDG",
-    }
-    if tracer is None:
-        tracer = ""
-    _tracer = tracer
-    tracer = tracer.lower()
-    if tracer not in tracer_labels:
-        infile_basename = op.basename(imagef).lower()
-        for key in tracer_labels:
-            if key in infile_basename:
-                tracer = key
-    tracer_fancy = tracer_labels.get(tracer, _tracer)
-    if tracer == "fbb":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "binary_r"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-    elif tracer == "fbp":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "binary"
-        if facecolor is None:
-            facecolor = "w"
-        if fontcolor is None:
-            fontcolor = "k"
-    elif tracer == "nav":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "nih"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-    elif tracer == "pib":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "nih"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-    elif tracer == "ftp":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "nih"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-    elif tracer == "fdg":
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.2
-        if cmap is None:
-            cmap = "nih"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-    else:
-        if vmin is None:
-            vmin = 0
-        if vmax is None:
-            vmax = 2.5
-        if cmap is None:
-            cmap = "nih"
-        if facecolor is None:
-            facecolor = "k"
-        if fontcolor is None:
-            fontcolor = "w"
-
-    if cmap == "nih":
-        cmap = nih_cmap()
+    # Get tracer-specific plotting parameters.
+    tracer, tracer_fancy, vmin, vmax, cmap, facecolor, fontcolor = get_tracer_defaults(
+        tracer,
+        imagef,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        facecolor=facecolor,
+        fontcolor=fontcolor,
+    )
 
     # Crop the data array.
     img, dat = nops.load_nii(imagef, **kws)
@@ -344,9 +258,25 @@ def create_multislice(
     else:
         iax = 0
     _ax = ax[iax]
+
+    # Format remaining plot parameters.
+    if len(cut_coords) == 1:
+        cut_coords = cut_coords[0]
     black_bg = True if facecolor == "k" else False
+    if display_mode == "mosaic":
+        cut_coords = None
+        _colorbar = True
+        colorbar = False
+    elif display_mode in ("ortho", "tiled"):
+        _colorbar = True
+        colorbar = False
+    else:
+        _colorbar = False
+
+    # Call the plotting function.
     warnings.filterwarnings("ignore", category=UserWarning)
-    _ = plotting.plot_anat(
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    _ = plotting.plot_img(
         img,
         cut_coords=cut_coords,
         display_mode=display_mode,
@@ -354,7 +284,7 @@ def create_multislice(
         draw_cross=draw_cross,
         black_bg=black_bg,
         cmap=cmap,
-        colorbar=False,
+        colorbar=_colorbar,
         vmin=vmin,
         vmax=vmax,
         title=None,
@@ -399,7 +329,6 @@ def create_multislice(
 
     # Add the title.
     if title is None:
-        _ax = ax[0]
         title = op.basename(imagef) + "\n"
         if subj:
             title += f"Participant: {subj}\n"
@@ -407,7 +336,7 @@ def create_multislice(
             title += f"Scan date: {image_date}\n"
         if tracer:
             title += f"Tracer: {tracer_fancy}"
-    _ax.set_title(
+    ax[0].set_title(
         title,
         fontsize=font["title"],
         color=fontcolor,
@@ -444,7 +373,7 @@ def create_multislice(
     elif not op.isfile(outfile):
         outfile = None
 
-    return outfile
+    return fig, outfile
 
 
 def create_2multislice(
@@ -544,7 +473,7 @@ def create_2multislice(
     img2_title : str, optional
         The axis title for the second image.
     display_mode : str, default : 'z'
-        The direction of slice cuts (see nilearn.plotting.plot_anat):
+        The direction of slice cuts (see nilearn.plotting.plot_img):
         - 'x': sagittal
         - 'y': coronal
         - 'z': axial
@@ -553,7 +482,7 @@ def create_2multislice(
         - 'mosaic': 3 cuts are performed along multiple rows and columns
     cut_coords : list, default : [-50, -38, -26, -14, -2, 10, 22, 34]
         The MNI coordinates of the point where the cut is performed
-        (see nilearn.plotting.plot_anat):
+        (see nilearn.plotting.plot_img):
         - If display_mode is 'ortho' or 'tiled', this should be a
           3-tuple: (x, y, z)
         - For display_mode == 'x', 'y', or 'z', then these are the
@@ -763,6 +692,17 @@ def create_2multislice(
                     img1_vmax = 2.5
             img2_vmax = img1_vmax
 
+    # Get tracer-specific plotting parameters.
+    tracer, tracer_fancy, vmin, vmax, cmap, facecolor, fontcolor = get_tracer_defaults(
+        img1_tracer,
+        image1f,
+        vmin=vmin,
+        vmax=vmax,
+        cmap=cmap,
+        facecolor=facecolor,
+        fontcolor=fontcolor,
+    )
+
     # Set plot parameters based on tracer if the tracer is known to this
     # script and if the parameters have not already been set. If the
     # tracer is not defined, or not known and can't be inferred from
@@ -919,7 +859,7 @@ def create_2multislice(
         _ax = ax[iax]
         black_bg = True if facecolor == "k" else False
         warnings.filterwarnings("ignore", category=UserWarning)
-        _ = plotting.plot_anat(
+        _ = plotting.plot_img(
             img,
             cut_coords=cut_coords,
             display_mode=display_mode,
@@ -1069,313 +1009,377 @@ def create_2multislice(
     return outfile
 
 
-def nih_cmap():
-    """Return the NIH colormap as a matplotlib ListedColormap."""
-    n_colors = 256
-    color_list = np.array(
-        [
-            [0, 0, 0, 0],
-            [0.059, 85, 0, 170],
-            [0.122, 0, 0, 85],
-            [0.247, 0, 0, 255],
-            [0.309, 0, 85, 255],
-            [0.372, 0, 170, 170],
-            [0.434, 0, 255, 170],
-            [0.497, 0, 255, 0],
-            [0.559, 85, 255, 85],
-            [0.625, 255, 255, 0],
-            [0.75, 255, 85, 0],
-            [0.85, 255, 0, 0],
-            [0.99608, 172, 0, 0],
-            [1, 140, 0, 0],
-        ]
-    )
-    color_list[:, 1:] = color_list[:, 1:] / 255
-    ii = 0
-    cmap = []
-    for ii in range(color_list.shape[0] - 1):
-        cmap += list(
-            sns.blend_palette(
-                colors=[color_list[ii, 1:], color_list[ii + 1, 1:]],
-                n_colors=np.rint(np.diff(color_list[ii : ii + 2, 0])[0] * n_colors),
-            )
+def create_multislice_multi(
+    image_files,
+    display_mode="z",
+    cut_coords=[-50, -38, -26, -14, -2, 10, 22, 34],
+    cmap=None,
+    n_cbar_ticks=2,
+    vmin=0,
+    vmax=None,
+    annotate=False,
+    draw_cross=False,
+    autoscale=False,
+    crop=True,
+    mask_thresh=0.05,
+    crop_prop=0.05,
+    outfile=None,
+    verbose=True,
+):
+    """Create a multislice plot of multiple images and return the saved file."""
+    # Set the output file name.
+    if outfile is None:
+        outfile = (
+            strm.add_presuf(image_files[0], suffix="_multislice")
+            .replace(".nii.gz", ".pdf")
+            .replace(".nii", ".pdf")
         )
-    cmap = mpl.colors.ListedColormap(cmap)
-    return cmap
+    if verbose and op.isfile(outfile):
+        print("Overwriting existing file: {}".format(outfile))
+
+    # Set default parameters.
+    if annotate is None:
+        annotate = False
+    if draw_cross is None:
+        draw_cross = False
+
+    # Plot the images.
+    with PdfPages(outfile) as pdf:
+        for imagef in image_files:
+            if verbose and nops.find_gzip(imagef) is None:
+                print("Skipping missing file: {}".format(imagef))
+                continue
+            fig, _ = create_multislice(
+                imagef,
+                display_mode=display_mode,
+                cut_coords=cut_coords,
+                cmap=cmap,
+                n_cbar_ticks=n_cbar_ticks,
+                vmin=vmin,
+                vmax=vmax,
+                annotate=annotate,
+                draw_cross=draw_cross,
+                autoscale=autoscale,
+                crop=crop,
+                mask_thresh=mask_thresh,
+                crop_prop=crop_prop,
+                pad_figure=False,
+                save_fig=False,
+            )
+            pdf.savefig(fig)
+            plt.close()
+
+    if verbose:
+        print("Saved {}".format(outfile))
+
+    return outfile
 
 
-def avid_cmap():
-    """Return the Avid colormap as a matplotlib ListedColormap."""
-    n_colors = 255
-    color_list = np.array(
-        [
-            [0 / n_colors, 0, 0, 0],
-            [1 / n_colors, 0, 0, 0],
-            [2 / n_colors, 0, 2, 3],
-            [3 / n_colors, 0, 5, 7],
-            [4 / n_colors, 1, 7, 10],
-            [5 / n_colors, 1, 9, 14],
-            [6 / n_colors, 1, 12, 17],
-            [7 / n_colors, 1, 14, 20],
-            [8 / n_colors, 2, 16, 24],
-            [9 / n_colors, 2, 19, 27],
-            [10 / n_colors, 2, 21, 30],
-            [11 / n_colors, 2, 23, 34],
-            [12 / n_colors, 2, 25, 37],
-            [13 / n_colors, 3, 28, 41],
-            [14 / n_colors, 3, 30, 44],
-            [15 / n_colors, 3, 32, 47],
-            [16 / n_colors, 3, 35, 51],
-            [17 / n_colors, 4, 37, 54],
-            [18 / n_colors, 4, 39, 57],
-            [19 / n_colors, 4, 42, 61],
-            [20 / n_colors, 4, 44, 64],
-            [21 / n_colors, 4, 46, 68],
-            [22 / n_colors, 5, 49, 71],
-            [23 / n_colors, 5, 51, 74],
-            [24 / n_colors, 5, 53, 78],
-            [25 / n_colors, 5, 56, 81],
-            [26 / n_colors, 5, 58, 84],
-            [27 / n_colors, 6, 60, 88],
-            [28 / n_colors, 6, 62, 91],
-            [29 / n_colors, 6, 65, 95],
-            [30 / n_colors, 6, 67, 98],
-            [31 / n_colors, 7, 69, 101],
-            [32 / n_colors, 7, 72, 105],
-            [33 / n_colors, 7, 74, 108],
-            [34 / n_colors, 7, 77, 108],
-            [35 / n_colors, 7, 79, 107],
-            [36 / n_colors, 7, 82, 107],
-            [37 / n_colors, 7, 85, 107],
-            [38 / n_colors, 7, 87, 107],
-            [39 / n_colors, 8, 90, 106],
-            [40 / n_colors, 8, 93, 106],
-            [41 / n_colors, 8, 95, 106],
-            [42 / n_colors, 8, 98, 106],
-            [43 / n_colors, 8, 101, 105],
-            [44 / n_colors, 8, 103, 105],
-            [45 / n_colors, 8, 106, 105],
-            [46 / n_colors, 8, 109, 105],
-            [47 / n_colors, 8, 111, 104],
-            [48 / n_colors, 8, 114, 104],
-            [49 / n_colors, 9, 117, 104],
-            [50 / n_colors, 9, 120, 104],
-            [51 / n_colors, 9, 122, 103],
-            [52 / n_colors, 9, 125, 103],
-            [53 / n_colors, 9, 128, 103],
-            [54 / n_colors, 9, 130, 103],
-            [55 / n_colors, 9, 133, 102],
-            [56 / n_colors, 9, 136, 102],
-            [57 / n_colors, 9, 138, 102],
-            [58 / n_colors, 9, 141, 102],
-            [59 / n_colors, 10, 144, 101],
-            [60 / n_colors, 10, 146, 101],
-            [61 / n_colors, 10, 149, 101],
-            [62 / n_colors, 10, 152, 101],
-            [63 / n_colors, 10, 154, 100],
-            [64 / n_colors, 10, 157, 100],
-            [65 / n_colors, 10, 157, 99],
-            [66 / n_colors, 11, 157, 98],
-            [67 / n_colors, 11, 156, 97],
-            [68 / n_colors, 11, 156, 96],
-            [69 / n_colors, 12, 156, 95],
-            [70 / n_colors, 12, 156, 95],
-            [71 / n_colors, 12, 156, 94],
-            [72 / n_colors, 13, 156, 93],
-            [73 / n_colors, 13, 155, 92],
-            [74 / n_colors, 13, 155, 91],
-            [75 / n_colors, 14, 155, 90],
-            [76 / n_colors, 14, 155, 89],
-            [77 / n_colors, 14, 155, 88],
-            [78 / n_colors, 15, 154, 87],
-            [79 / n_colors, 15, 154, 86],
-            [80 / n_colors, 15, 154, 85],
-            [81 / n_colors, 16, 154, 85],
-            [82 / n_colors, 16, 154, 84],
-            [83 / n_colors, 16, 154, 83],
-            [84 / n_colors, 17, 153, 82],
-            [85 / n_colors, 17, 153, 81],
-            [86 / n_colors, 17, 153, 80],
-            [87 / n_colors, 18, 153, 79],
-            [88 / n_colors, 18, 153, 78],
-            [89 / n_colors, 18, 152, 77],
-            [90 / n_colors, 19, 152, 76],
-            [91 / n_colors, 19, 152, 75],
-            [92 / n_colors, 19, 152, 75],
-            [93 / n_colors, 20, 152, 74],
-            [94 / n_colors, 20, 152, 73],
-            [95 / n_colors, 20, 151, 72],
-            [96 / n_colors, 21, 151, 71],
-            [97 / n_colors, 21, 151, 70],
-            [98 / n_colors, 26, 147, 69],
-            [99 / n_colors, 31, 144, 68],
-            [100 / n_colors, 36, 140, 67],
-            [101 / n_colors, 41, 137, 66],
-            [102 / n_colors, 46, 133, 65],
-            [103 / n_colors, 52, 129, 64],
-            [104 / n_colors, 57, 126, 63],
-            [105 / n_colors, 62, 122, 62],
-            [106 / n_colors, 67, 118, 60],
-            [107 / n_colors, 72, 115, 59],
-            [108 / n_colors, 77, 111, 58],
-            [109 / n_colors, 82, 108, 57],
-            [110 / n_colors, 87, 104, 56],
-            [111 / n_colors, 92, 100, 55],
-            [112 / n_colors, 97, 97, 54],
-            [113 / n_colors, 103, 93, 53],
-            [114 / n_colors, 108, 89, 52],
-            [115 / n_colors, 113, 86, 51],
-            [116 / n_colors, 118, 82, 50],
-            [117 / n_colors, 123, 79, 49],
-            [118 / n_colors, 128, 75, 48],
-            [119 / n_colors, 133, 71, 47],
-            [120 / n_colors, 138, 68, 46],
-            [121 / n_colors, 143, 64, 45],
-            [122 / n_colors, 148, 60, 43],
-            [123 / n_colors, 153, 57, 42],
-            [124 / n_colors, 159, 53, 41],
-            [125 / n_colors, 164, 50, 40],
-            [126 / n_colors, 169, 46, 39],
-            [127 / n_colors, 174, 42, 38],
-            [128 / n_colors, 179, 39, 37],
-            [129 / n_colors, 184, 35, 36],
-            [130 / n_colors, 185, 36, 36],
-            [131 / n_colors, 186, 37, 36],
-            [132 / n_colors, 187, 38, 36],
-            [133 / n_colors, 188, 39, 36],
-            [134 / n_colors, 189, 40, 36],
-            [135 / n_colors, 189, 41, 36],
-            [136 / n_colors, 190, 42, 36],
-            [137 / n_colors, 191, 43, 36],
-            [138 / n_colors, 192, 43, 37],
-            [139 / n_colors, 193, 44, 37],
-            [140 / n_colors, 194, 45, 37],
-            [141 / n_colors, 195, 46, 37],
-            [142 / n_colors, 196, 47, 37],
-            [143 / n_colors, 197, 48, 37],
-            [144 / n_colors, 198, 49, 37],
-            [145 / n_colors, 199, 50, 37],
-            [146 / n_colors, 199, 51, 37],
-            [147 / n_colors, 200, 52, 37],
-            [148 / n_colors, 201, 53, 37],
-            [149 / n_colors, 202, 54, 37],
-            [150 / n_colors, 203, 55, 37],
-            [151 / n_colors, 204, 56, 37],
-            [152 / n_colors, 205, 57, 37],
-            [153 / n_colors, 206, 58, 37],
-            [154 / n_colors, 207, 58, 38],
-            [155 / n_colors, 208, 59, 38],
-            [156 / n_colors, 209, 60, 38],
-            [157 / n_colors, 209, 61, 38],
-            [158 / n_colors, 210, 62, 38],
-            [159 / n_colors, 211, 63, 38],
-            [160 / n_colors, 212, 64, 38],
-            [161 / n_colors, 213, 65, 38],
-            [162 / n_colors, 214, 66, 38],
-            [163 / n_colors, 215, 68, 38],
-            [164 / n_colors, 215, 71, 38],
-            [165 / n_colors, 216, 73, 38],
-            [166 / n_colors, 216, 75, 38],
-            [167 / n_colors, 217, 77, 38],
-            [168 / n_colors, 217, 80, 37],
-            [169 / n_colors, 218, 82, 37],
-            [170 / n_colors, 218, 84, 37],
-            [171 / n_colors, 219, 86, 37],
-            [172 / n_colors, 219, 89, 37],
-            [173 / n_colors, 220, 91, 37],
-            [174 / n_colors, 220, 93, 37],
-            [175 / n_colors, 221, 95, 37],
-            [176 / n_colors, 221, 98, 37],
-            [177 / n_colors, 222, 100, 37],
-            [178 / n_colors, 222, 102, 36],
-            [179 / n_colors, 223, 104, 36],
-            [180 / n_colors, 223, 107, 36],
-            [181 / n_colors, 224, 109, 36],
-            [182 / n_colors, 224, 111, 36],
-            [183 / n_colors, 225, 113, 36],
-            [184 / n_colors, 225, 116, 36],
-            [185 / n_colors, 226, 118, 36],
-            [186 / n_colors, 226, 120, 36],
-            [187 / n_colors, 227, 122, 36],
-            [188 / n_colors, 227, 125, 35],
-            [189 / n_colors, 228, 127, 35],
-            [190 / n_colors, 228, 129, 35],
-            [191 / n_colors, 229, 131, 35],
-            [192 / n_colors, 229, 134, 35],
-            [193 / n_colors, 230, 136, 35],
-            [194 / n_colors, 230, 138, 34],
-            [195 / n_colors, 231, 140, 34],
-            [196 / n_colors, 231, 142, 33],
-            [197 / n_colors, 231, 144, 33],
-            [198 / n_colors, 232, 146, 32],
-            [199 / n_colors, 232, 148, 32],
-            [200 / n_colors, 233, 150, 31],
-            [201 / n_colors, 233, 152, 30],
-            [202 / n_colors, 233, 154, 30],
-            [203 / n_colors, 234, 156, 29],
-            [204 / n_colors, 234, 158, 29],
-            [205 / n_colors, 234, 160, 28],
-            [206 / n_colors, 235, 162, 28],
-            [207 / n_colors, 235, 164, 27],
-            [208 / n_colors, 235, 166, 26],
-            [209 / n_colors, 236, 168, 26],
-            [210 / n_colors, 236, 169, 25],
-            [211 / n_colors, 237, 171, 25],
-            [212 / n_colors, 237, 173, 24],
-            [213 / n_colors, 237, 175, 23],
-            [214 / n_colors, 238, 177, 23],
-            [215 / n_colors, 238, 179, 22],
-            [216 / n_colors, 238, 181, 22],
-            [217 / n_colors, 239, 183, 21],
-            [218 / n_colors, 239, 185, 21],
-            [219 / n_colors, 239, 187, 20],
-            [220 / n_colors, 240, 189, 19],
-            [221 / n_colors, 240, 191, 19],
-            [222 / n_colors, 241, 193, 18],
-            [223 / n_colors, 241, 195, 18],
-            [224 / n_colors, 241, 197, 17],
-            [225 / n_colors, 242, 199, 17],
-            [226 / n_colors, 242, 201, 16],
-            [227 / n_colors, 242, 202, 16],
-            [228 / n_colors, 242, 203, 16],
-            [229 / n_colors, 242, 204, 17],
-            [230 / n_colors, 242, 205, 17],
-            [231 / n_colors, 241, 207, 17],
-            [232 / n_colors, 241, 208, 17],
-            [233 / n_colors, 241, 209, 18],
-            [234 / n_colors, 241, 210, 18],
-            [235 / n_colors, 241, 211, 18],
-            [236 / n_colors, 241, 212, 18],
-            [237 / n_colors, 241, 213, 19],
-            [238 / n_colors, 241, 214, 19],
-            [239 / n_colors, 241, 215, 19],
-            [240 / n_colors, 241, 216, 19],
-            [241 / n_colors, 240, 218, 20],
-            [242 / n_colors, 240, 219, 20],
-            [243 / n_colors, 240, 220, 20],
-            [244 / n_colors, 240, 221, 20],
-            [245 / n_colors, 240, 222, 21],
-            [246 / n_colors, 240, 223, 21],
-            [247 / n_colors, 240, 224, 21],
-            [248 / n_colors, 240, 225, 21],
-            [249 / n_colors, 240, 226, 22],
-            [250 / n_colors, 240, 227, 22],
-            [251 / n_colors, 239, 229, 22],
-            [252 / n_colors, 239, 230, 22],
-            [253 / n_colors, 239, 231, 23],
-            [254 / n_colors, 239, 232, 23],
-            [255 / n_colors, 239, 233, 23],
-        ]
+def get_tracer_defaults(
+    tracer, imagef=None, vmin=None, vmax=None, cmap=None, facecolor=None, fontcolor=None
+):
+    """Set undefined plot parameters based on tracer."""
+    tracer_labels = {
+        "fbb": "[18F]Florbetaben",
+        "fbp": "[18F]Florbetapir",
+        "nav": "[18F]NAV4694",
+        "pib": "[11C]PIB",
+        "ftp": "[18F]Flortaucipir",
+        "fdg": "[18F]FDG",
+    }
+    if tracer is None:
+        tracer = ""
+    _tracer = tracer
+    tracer = tracer.lower()
+    if (tracer not in tracer_labels) and (imagef is not None):
+        infile_basename = op.basename(imagef).lower()
+        for key in tracer_labels:
+            if key in infile_basename:
+                tracer = key
+    tracer_fancy = tracer_labels.get(tracer, _tracer)
+    if tracer == "fbb":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "binary_r"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    elif tracer == "fbp":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "binary"
+        if facecolor is None:
+            facecolor = "w"
+        if fontcolor is None:
+            fontcolor = "k"
+    elif tracer == "nav":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    elif tracer == "pib":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    elif tracer == "ftp":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    elif tracer == "fdg":
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.2
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+    else:
+        if vmin is None:
+            vmin = 0
+        if vmax is None:
+            vmax = 2.5
+        if cmap is None:
+            cmap = "nih"
+        if facecolor is None:
+            facecolor = "k"
+        if fontcolor is None:
+            fontcolor = "w"
+
+    # Import custom colormaps.
+    if cmap == "avid":
+        cmap = custom_colormaps.avid_cmap()
+    elif cmap == "nih":
+        cmap = custom_colormaps.nih_cmap()
+    elif cmap == "turbo":
+        cmap = custom_colormaps.turbo_cmap()
+
+    return tracer, tracer_fancy, vmin, vmax, cmap, facecolor, fontcolor
+
+
+def _parse_args():
+    """Parse and return command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="""Save a PDF file showing multiple slices from 1+ NIfTI scans.""",
+        formatter_class=TextFormatter,
+        exit_on_error=False,
     )
-    color_list[:, 1:] = color_list[:, 1:] / 255
-    ii = 0
-    cmap = []
-    for ii in range(color_list.shape[0] - 1):
-        cmap += list(
-            sns.blend_palette(
-                colors=[color_list[ii, 1:], color_list[ii + 1, 1:]],
-                n_colors=np.rint(np.diff(color_list[ii : ii + 2, 0])[0] * n_colors),
-            )
-        )
-    cmap = mpl.colors.ListedColormap(cmap)
-    return cmap
+    parser.add_argument(
+        "-i",
+        "--images",
+        required=True,
+        type=str,
+        nargs="+",
+        help="Paths to 1+ NIfTI images",
+    )
+    parser.add_argument(
+        "-o",
+        "--outfile",
+        required=True,
+        type=str,
+        help="Name of the output PDF file to be created",
+    )
+    parser.add_argument(
+        "-m",
+        "--mode",
+        type=str,
+        default="z",
+        choices=["x", "y", "z", "ortho", "tiled", "mosaic"],
+    )
+    parser.add_argument(
+        "-s",
+        "--slices",
+        type=int,
+        nargs="+",
+        default=[-50, -38, -26, -14, -2, 10, 22, 34],
+        help=(
+            "List of image slices to show along the z-axis, in MNI coordinates\n"
+            + "(default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--crop",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help="Crop the multislice images to the brain",
+    )
+    parser.add_argument(
+        "--mask_thresh",
+        type=float,
+        default=0.05,
+        help=(
+            "Cropping threshold for defining empty voxels outside the brain;\n"
+            + "used together with crop_prop to determine how aggresively\n"
+            + "to remove planes of mostly empty space around the image\n"
+            + "(default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--crop_prop",
+        type=float,
+        default=0.05,
+        help=(
+            "Defines how tightly to crop the brain for multislice creation\n"
+            + "(proportion of empty voxels in each plane that are allowed to be cropped)\n"
+            + "(default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--cmap",
+        type=str,
+        help=(
+            "Colormap to use for the multislice images (overrides the\n"
+            + "tracer-specific defaults)"
+        ),
+    )
+    parser.add_argument(
+        "--annotate",
+        action="store_true",
+        help="Add positions and L/R annotations to the multislice images",
+    )
+    parser.add_argument(
+        "--draw_cross",
+        action="store_true",
+        help="Draw a cross on the multislice images to indicate the cut position",
+    )
+    parser.add_argument(
+        "--autoscale",
+        action="store_true",
+        help=(
+            "Set multislice vmin and vmax to to 0.01 and the 99.5th percentile\n"
+            + "of nonzero values, respectively (overrides --vmin, --vmax,\n"
+            + "and tracer-specific default scaling)"
+        ),
+    )
+    parser.add_argument(
+        "--vmin",
+        type=float,
+        help=(
+            "Minimum intensity threshold for the multislice images\n"
+            + "(overrides the tracer-specific defaults)"
+        ),
+    )
+    parser.add_argument(
+        "--vmax",
+        type=float,
+        help=(
+            "Maximum intensity threshold for the multislice images\n"
+            + "(overrides the tracer-specific defaults)"
+        ),
+    )
+    parser.add_argument(
+        "--n_cbar_ticks",
+        type=float,
+        default=2,
+        help=(
+            "Number of ticks to show for the  multislice PDF colorbar\n"
+            + "(default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="Run without printing output"
+    )
+
+    # Parse the command line arguments
+    args = parser.parse_args()
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit()
+    return args
+
+
+class TextFormatter(argparse.RawTextHelpFormatter):
+    """Custom formatter for argparse help text."""
+
+    # use defined argument order to display usage
+    def _format_usage(self, usage, actions, groups, prefix):
+        if prefix is None:
+            prefix = "usage: "
+
+        # if usage is specified, use that
+        if usage is not None:
+            usage = usage % dict(prog=self._prog)
+
+        # if no optionals or positionals are available, usage is just prog
+        elif usage is None and not actions:
+            usage = "%(prog)s" % dict(prog=self._prog)
+        elif usage is None:
+            prog = "%(prog)s" % dict(prog=self._prog)
+            # build full usage string
+            action_usage = self._format_actions_usage(actions, groups)  # NEW
+            usage = " ".join([s for s in [prog, action_usage] if s])
+            # omit the long line wrapping code
+        # prefix with 'usage:'
+        return "%s%s\n\n" % (prefix, usage)
+
+
+if __name__ == "__main__":
+    # Start the timer.
+    timer = Timer(msg="\nTotal runtime: ")
+
+    # Get command line arguments.
+    args = _parse_args()
+    verbose = True
+    if args.quiet:
+        verbose = False
+
+    # print("image files:")
+    # for imagef in args.images:
+    #     imagef = op.abspath(imagef)
+    #     outfile = op.abspath(args.outfile)
+    #     print("{}, exists = {}".format(imagef, op.isfile(imagef)))
+    # print("outfile: {}, exists = {}".format(outfile, op.isfile(outfile)))
+    # sys.exit(0)
+
+    multislicef = create_multislice_multi(
+        image_files=args.images,
+        outfile=args.outfile,
+        display_mode=args.mode,
+        cut_coords=args.slices,
+        cmap=args.cmap,
+        vmin=args.vmin,
+        vmax=args.vmax,
+        annotate=args.annotate,
+        draw_cross=args.draw_cross,
+        autoscale=args.autoscale,
+        n_cbar_ticks=args.n_cbar_ticks,
+        crop=args.crop,
+        mask_thresh=args.mask_thresh,
+        crop_prop=args.crop_prop,
+        verbose=verbose,
+    )
+
+    # Print the total runtime.
+    if verbose:
+        print(timer)
+
+    sys.exit(0)
