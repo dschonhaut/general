@@ -62,6 +62,8 @@ def rolling_func(arr, f=np.all, window=3, right_fill=None):
         The function to apply (must take an axis argument).
     window : int
         The number of values in each window.
+    right_fill : any
+        The value to fill the right side of the array with.
 
     Returns
     -------
@@ -91,13 +93,37 @@ def rolling_window(a, window):
     return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 
+def percentile1d(a, q=None):
+    """Compute percentiles of the flattened array.
+
+    If q is None, returns the 0th, 1st, ..., 100th percentiles.
+
+    Parameters
+    ----------
+    a : array_like
+        Input array or object that can be converted to an array.
+    q : array_like of float, optional
+
+    Returns
+    -------
+    percentiles : Series
+        Values of the array at the given percentiles.
+    """
+    a = np.asanyarray(a).flatten()
+    if q is None:
+        q = np.arange(101)
+
+    return pd.Series(index=q, data=np.percentile(a, q))
+
+
 def unique(values, **kwargs):
     """Return unique elements and their counts as a DataFrame."""
     if "dropna" not in kwargs:
         kwargs["dropna"] = False
+    counts = pd.Series(values).value_counts(**kwargs)
     if "sort" not in kwargs:
-        kwargs["sort"] = True
-    return pd.Series(values).value_counts(**kwargs)
+        counts = counts.sort_index()
+    return counts
 
 
 def crop_arr3d(arr, mask=None, crop=0.05):
