@@ -5,13 +5,6 @@ $ test_if_equal.py img1.nii img2.nii [mask.nii]
 """
 
 import sys
-import os
-import os.path as op
-import numpy as np
-import pandas as pd
-import scipy.stats as stats
-import transforms3d.affines as affines
-import general.nifti.nifti_ops as nops
 
 
 def compare_imgs(img1_path, img2_path, mask=None):
@@ -26,6 +19,10 @@ def compare_imgs(img1_path, img2_path, mask=None):
     mask : str
         Path to a nifti image with equal dimensions as img1 and img2.
     """
+    import numpy as np
+    import scipy.stats as stats
+    import general.nifti.nifti_ops as nops
+
     # Load the input niftis
     img1, dat1 = nops.load_nii_flex(img1_path, flatten=True)
     img2, dat2 = nops.load_nii_flex(img2_path, flatten=True)
@@ -45,14 +42,16 @@ def compare_imgs(img1_path, img2_path, mask=None):
     # Identify nonzero voxels across both niftis and mask, if applicable
     if mask:
         maskdat = nops.load_nii_flex(mask, dat_only=True, flatten=True, binarize=True)
-        output["n_voxels"] = np.flatnonzero(maskdat).size
-        nonzero_voxels = np.intersect1d(
-            np.flatnonzero(maskdat),
-            np.intersect1d(np.flatnonzero(dat1), np.flatnonzero(dat2)),
-        )
-    else:
-        output["n_voxels"] = dat1.size
-        nonzero_voxels = np.intersect1d(np.flatnonzero(dat1), np.flatnonzero(dat2))
+        inmask = np.flatnonzero(maskdat)
+        dat1 = dat1[inmask]
+        dat2 = dat2[inmask]
+
+    output["n_voxels"] = dat1.size
+    dat1_flatnonzero = np.flatnonzero(dat1)
+    dat2_flatnonzero = np.flatnonzero(dat2)
+    output["dat1_num_nonzero"] = dat1_flatnonzero.size
+    output["dat2_num_nonzero"] = dat2_flatnonzero.size
+    nonzero_voxels = np.intersect1d(dat1_flatnonzero, dat2_flatnonzero)
 
     # Compute voxel stats only on nonzero voxels
     dat1 = dat1[nonzero_voxels]
@@ -64,8 +63,20 @@ def compare_imgs(img1_path, img2_path, mask=None):
     else:
         output["arrays_equal"] = False
 
+    # Check how many voxels are nonzero
+    output["num_nonzero"] = dat1.size
+    if output["num_nonzero"] == 0:
+        return output
+
     # If affine and arrays are equal, return that the images are equal
-    if output["affines_equal"] and output["arrays_equal"]:
+    if np.all(
+        (
+            output["affines_equal"],
+            output["arrays_equal"],
+            output["dat1_num_nonzero"] == output["dat2_num_nonzero"],
+            output["num_nonzero"] > 0,
+        )
+    ):
         return output
 
     # Compute data array difference stats
@@ -89,8 +100,6 @@ def compare_imgs(img1_path, img2_path, mask=None):
     output["dat1_sub_dat2_rmse"] = dat1_sub_dat2_rmse
     output["dat1_sub_dat2_pcts"] = np.percentile(dat1_sub_dat2, output["pcts"])
     output["dat1_sub_dat2_abs_pcts"] = np.percentile(dat1_sub_dat2_abs, output["pcts"])
-    output["num_nonzero"] = dat1.size
-    output["pct_nonzero"] = output["num_nonzero"] / output["n_voxels"]
     output["_r"] = stats.pearsonr(dat1, dat2)[0]
 
     return output
@@ -104,6 +113,9 @@ if __name__ == "__main__":
             sep="\n",
         )
         sys.exit(0)
+
+    import os
+    import os.path as op
 
     cwd = os.getcwd()
 
@@ -135,18 +147,31 @@ if __name__ == "__main__":
 
     # Figure out if the images are equal and print the result
     output = compare_imgs(img1_path, img2_path, mask)
-    sep_len = 47
+    sep_len = 60
 
     # Print output
-    if output["affines_equal"] and output["arrays_equal"]:
-        print("\nImages are equal\n")
-        sys.exit(0)
     print(
         "",
         "img1 : {}".format(op.basename(img1_path)),
         "img2 : {}".format(op.basename(img2_path)),
+        sep="\n",
+    )
+    if all(
+        (
+            output["affines_equal"],
+            output["arrays_equal"],
+            output["dat1_num_nonzero"] == output["dat2_num_nonzero"],
+            output["num_nonzero"] > 0,
+        )
+    ):
+        print("\nImages are equal\n")
+        sys.exit(0)
+
+    # Affine comparison
+    print(
         "",
         "=" * sep_len,
+        "AFFINE TRANSFORMS",
         "",
         sep="\n",
     )
@@ -154,6 +179,9 @@ if __name__ == "__main__":
         msg = "Image affines are equal"
         print(msg)
     else:
+        import numpy as np
+        import transforms3d.affines as affines
+
         msg = "Image affines are NOT equal"
         print(msg + "\n")
         aff = {
@@ -194,26 +222,81 @@ if __name__ == "__main__":
                     ),
                     sep="\n",
                 )
-    print("", "=" * sep_len, "", sep="\n")
+
+    # Data array comparison
+    print("", "=" * sep_len, "DATA ARRAYS", "", sep="\n")
+
+    # Count how many voxels are nonzero
+    if output["dat1_num_nonzero"] == output["dat2_num_nonzero"]:
+        if mask:
+            print(
+                "{:,} of {:,} ({:.2%}) voxels are nonzero within the mask".format(
+                    output["num_nonzero"],
+                    output["n_voxels"],
+                    output["num_nonzero"] / output["n_voxels"],
+                ),
+                end="\n\n",
+            )
+        else:
+            print(
+                "{:,} of {:,} ({:.2%}) voxels are nonzero".format(
+                    output["num_nonzero"],
+                    output["n_voxels"],
+                    output["num_nonzero"] / output["n_voxels"],
+                ),
+                end="\n\n",
+            )
+    else:
+        if mask:
+            print(
+                "img1 and img2 have different numbers of nonzero voxels within the mask:"
+            )
+        else:
+            print("img1 and img2 have different numbers of nonzero voxels:")
+        print(
+            "* img1: {:,} of {:,} ({:.2%}) voxels are nonzero".format(
+                output["dat1_num_nonzero"],
+                output["n_voxels"],
+                output["dat1_num_nonzero"] / output["n_voxels"],
+            ),
+            "* img2: {:,} of {:,} ({:.2%}) voxels are nonzero".format(
+                output["dat2_num_nonzero"],
+                output["n_voxels"],
+                output["dat2_num_nonzero"] / output["n_voxels"],
+            ),
+            sep="\n",
+        )
+        if output["num_nonzero"] > 0:
+            print(
+                "* combined: {:,} of {:,} ({:.2%}) voxel values".format(
+                    output["num_nonzero"],
+                    output["n_voxels"],
+                    output["num_nonzero"] / output["n_voxels"],
+                ),
+                "            will be analyzed below",
+                sep="\n",
+                end="\n\n",
+            )
+        else:
+            print("\nNo nonzero voxels overlap between the images.\n")
+            sys.exit(0)
 
     if output["arrays_equal"]:
         if mask:
-            msg = "Data arrays are equal within the mask"
+            msg = "Data arrays are equal across nonzero voxels within the mask"
         else:
-            msg = "Data arrays are equal"
+            msg = "Data arrays are equal across nonzero voxels"
         print(msg, "", sep="\n")
     else:
+        import pandas as pd
+
         if mask:
-            msg = "Data arrays are NOT equal within the mask"
+            msg = "Data arrays are NOT equal across nonzero voxels within the mask"
         else:
-            msg = "Data arrays are NOT equal"
+            msg = "Data arrays are NOT equal across nonzero voxels"
         print(
             msg,
             "",
-            "Image Stats (img1*img2 nonzero voxels)",
-            "* nonzero voxels   : {:,}/{:,} ({:.2%})".format(
-                output["num_nonzero"], output["n_voxels"], output["pct_nonzero"]
-            ),
             "* img1             : {:,.8f} ± {:,.8f} (M ± SD)".format(
                 output["dat1_mean"], output["dat1_std"]
             ),
@@ -230,7 +313,7 @@ if __name__ == "__main__":
             "* img1 ~ img2      : r = {:.8f}".format(output["_r"]),
             "",
             "Percentiles",
-            "-" * 30,
+            "-" * 11,
             pd.DataFrame(
                 [
                     output["dat1_pcts"],
