@@ -52,7 +52,7 @@ def set_rcparams(rcparams):
     pad = params["pad"]
     rcparams["axes.axisbelow"] = True
     rcparams["axes.formatter.offset_threshold"] = 2
-    rcparams["axes.grid"] = True
+    rcparams["axes.grid"] = False
     rcparams["axes.grid.which"] = "both"
     rcparams["axes.labelpad"] = pad["label"]
     rcparams["axes.labelsize"] = font["label"]
