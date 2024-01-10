@@ -11,7 +11,10 @@ def run_cmd(cmd):
     return output
 
 
-def rm_files(topdir):
+def rm_files(topdir, rm_topdir=False):
     """Remove all files and directories in a directory."""
-    output = run_cmd(f"rm -rf {topdir}/*")
+    if rm_topdir:
+        output = run_cmd(f"find {topdir} -delete")
+    else:
+        output = run_cmd(f"find {topdir} -mindepth 1 -delete")
     return output
