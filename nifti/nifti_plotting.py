@@ -104,7 +104,7 @@ def create_multislice(
     cmap : str, default: None
         The colormap to use. Either a string that is a name of a
         matplotlib colormap, or a matplotlib colormap object. "nih" as
-        defined by mricron is also recognized.
+        defined by mricron and "turbo" are also recognized.
     colorbar : bool, default : False
         If True, a colorbar is displayed below the image slices
         showing color mappings from vmin to vmax.
@@ -230,6 +230,12 @@ def create_multislice(
         facecolor=facecolor,
         fontcolor=fontcolor,
     )
+    if cmap == "nih":
+        cmap = custom_colormaps.nih_cmap()
+    elif cmap == "avid":
+        cmap = custom_colormaps.avid_cmap()
+    elif cmap == "turbo":
+        cmap = custom_colormaps.turbo_cmap()
 
     # Crop the data array.
     img, dat = nops.load_nii(imagef, **kws)
@@ -691,17 +697,6 @@ def create_2multislice(
                     img1_vmax = 2.5
             img2_vmax = img1_vmax
 
-    # Get tracer-specific plotting parameters.
-    tracer, tracer_fancy, vmin, vmax, cmap, facecolor, fontcolor = get_tracer_defaults(
-        img1_tracer,
-        image1f,
-        vmin=vmin,
-        vmax=vmax,
-        cmap=cmap,
-        facecolor=facecolor,
-        fontcolor=fontcolor,
-    )
-
     # Set plot parameters based on tracer if the tracer is known to this
     # script and if the parameters have not already been set. If the
     # tracer is not defined, or not known and can't be inferred from
@@ -725,6 +720,26 @@ def create_2multislice(
             cmap = img1_cmap
             vmin = img1_vmin
             vmax = img1_vmax
+            facecolor = img1_facecolor
+            fontcolor = img1_fontcolor
+            # Get tracer-specific plotting parameters.
+            (
+                tracer,
+                tracer_fancy,
+                vmin,
+                vmax,
+                cmap,
+                facecolor,
+                fontcolor,
+            ) = get_tracer_defaults(
+                img1_tracer,
+                image1f,
+                vmin=vmin,
+                vmax=vmax,
+                cmap=cmap,
+                facecolor=facecolor,
+                fontcolor=fontcolor,
+            )
             colorbar = img1_colorbar
             cbar_tick_format = img1_cbar_tick_format
             n_cbar_ticks = img1_n_cbar_ticks
@@ -734,8 +749,6 @@ def create_2multislice(
             crop_prop = img1_crop_prop
             annotate = img1_annotate
             draw_cross = img1_draw_cross
-            facecolor = img1_facecolor
-            fontcolor = img1_fontcolor
         else:
             imagef = image2f
             subj = img2_subj
@@ -745,6 +758,26 @@ def create_2multislice(
             cmap = img2_cmap
             vmin = img2_vmin
             vmax = img2_vmax
+            facecolor = img2_facecolor
+            fontcolor = img2_fontcolor
+            # Get tracer-specific plotting parameters.
+            (
+                tracer,
+                tracer_fancy,
+                vmin,
+                vmax,
+                cmap,
+                facecolor,
+                fontcolor,
+            ) = get_tracer_defaults(
+                img1_tracer,
+                image1f,
+                vmin=vmin,
+                vmax=vmax,
+                cmap=cmap,
+                facecolor=facecolor,
+                fontcolor=fontcolor,
+            )
             colorbar = img2_colorbar
             cbar_tick_format = img2_cbar_tick_format
             n_cbar_ticks = img2_n_cbar_ticks
@@ -754,8 +787,6 @@ def create_2multislice(
             crop_prop = img2_crop_prop
             annotate = img2_annotate
             draw_cross = img2_draw_cross
-            facecolor = img2_facecolor
-            fontcolor = img2_fontcolor
 
         # Set missing parameters.
         if tracer is None:
@@ -836,9 +867,11 @@ def create_2multislice(
                 fontcolor = "w"
 
         if cmap == "nih":
-            cmap = nih_cmap()
+            cmap = custom_colormaps.nih_cmap()
         elif cmap == "avid":
-            cmap = avid_cmap()
+            cmap = custom_colormaps.avid_cmap()
+        elif cmap == "turbo":
+            cmap = custom_colormaps.turbo_cmap()
 
         # Crop the data array.
         img, dat = nops.load_nii(imagef, **kws)
@@ -1100,7 +1133,7 @@ def get_tracer_defaults(
         if vmin is None:
             vmin = 0
         if vmax is None:
-            vmax = 2.5
+            vmax = 2.3
         if cmap is None:
             cmap = "binary_r"
         if facecolor is None:
@@ -1111,7 +1144,7 @@ def get_tracer_defaults(
         if vmin is None:
             vmin = 0
         if vmax is None:
-            vmax = 2.5
+            vmax = 2.2
         if cmap is None:
             cmap = "binary"
         if facecolor is None:
@@ -1144,7 +1177,7 @@ def get_tracer_defaults(
         if vmin is None:
             vmin = 0
         if vmax is None:
-            vmax = 2.5
+            vmax = 4.5
         if cmap is None:
             cmap = "nih"
         if facecolor is None:
@@ -1350,14 +1383,6 @@ if __name__ == "__main__":
     verbose = True
     if args.quiet:
         verbose = False
-
-    # print("image files:")
-    # for imagef in args.images:
-    #     imagef = op.abspath(imagef)
-    #     outfile = op.abspath(args.outfile)
-    #     print("{}, exists = {}".format(imagef, op.isfile(imagef)))
-    # print("outfile: {}, exists = {}".format(outfile, op.isfile(outfile)))
-    # sys.exit(0)
 
     multislicef = create_multislice_multi(
         image_files=args.images,
