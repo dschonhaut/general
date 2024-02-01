@@ -34,6 +34,7 @@ def create_multislice(
     cbar_label=None,
     vmin=0,
     vmax=None,
+    hide_cbar_values=False,
     autoscale=False,
     autoscale_values_gt0=True,
     autoscale_min_pct=0.5,
@@ -120,6 +121,9 @@ def create_multislice(
         The minimum value of the colormap range.
     vmax : float, default: None
         The maximum value of the colormap range.
+    hide_cbar_values : bool, default : False
+        If True, the colorbar values are not displayed but are merely
+        labeled from "min" to "max." Overrides n_cbar_ticks.
     autoscale : bool, default: False
         If True, autoscale vmin and vmax according to min and max
         percentiles of image voxel values. Does not override vmin or
@@ -202,7 +206,7 @@ def create_multislice(
                 + "\n\t{}".format(op.dirname(outfile))
                 + "\n\t{}".format(op.basename(outfile))
             )
-        return outfile
+        return None, outfile
     # Check that the image file exists.
     nops.find_gzip(imagef, raise_error=True)
 
@@ -315,11 +319,15 @@ def create_multislice(
         cbar.ax.tick_params(
             labelsize=font["tick"], labelcolor=fontcolor, color=fontcolor, width=1
         )
-        cbar_ticks = np.linspace(vmin, vmax, n_cbar_ticks)
-        cbar.ax.set_xticks(cbar_ticks)
-        cbar.ax.set_xticklabels(
-            ["{:{_}}".format(tick, _=cbar_tick_format) for tick in cbar_ticks]
-        )
+        if hide_cbar_values:
+            cbar.ax.set_xticks([vmin, vmax])
+            cbar.ax.set_xticklabels(["Low", "High"])
+        else:
+            cbar_ticks = np.linspace(vmin, vmax, n_cbar_ticks)
+            cbar.ax.set_xticks(cbar_ticks)
+            cbar.ax.set_xticklabels(
+                ["{:{_}}".format(tick, _=cbar_tick_format) for tick in cbar_ticks]
+            )
         if cbar_label is None:
             if tracer is None:
                 cbar_label = "Value"
@@ -340,7 +348,9 @@ def create_multislice(
         if image_date:
             title += f"Scan date: {image_date}\n"
         if tracer:
-            title += f"Tracer: {tracer_fancy}"
+            title += f"Tracer: {tracer_fancy}\n"
+        if hide_cbar_values:
+            title += "SUVR range: {:.1f}-{:.1f}".format(vmin, vmax)
     ax[0].set_title(
         title,
         fontsize=font["title"],
@@ -1133,7 +1143,7 @@ def get_tracer_defaults(
         if vmin is None:
             vmin = 0
         if vmax is None:
-            vmax = 2.3
+            vmax = 2.5
         if cmap is None:
             cmap = "binary_r"
         if facecolor is None:
