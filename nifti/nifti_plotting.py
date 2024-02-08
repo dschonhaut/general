@@ -1154,7 +1154,7 @@ def get_tracer_defaults(
         if vmin is None:
             vmin = 0
         if vmax is None:
-            vmax = 2.2
+            vmax = 2.5
         if cmap is None:
             cmap = "binary"
         if facecolor is None:
