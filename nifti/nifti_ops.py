@@ -9,7 +9,6 @@ from collections import OrderedDict as od
 import numpy as np
 import pandas as pd
 import nibabel as nib
-import transforms3d.affines as affines
 import general.osops.os_utils as osu
 import general.basic.str_methods as strm
 
@@ -203,16 +202,18 @@ def _format_array(
     return dat
 
 
-def save_nii(img, dat, outfile, overwrite=False, verbose=True):
+def save_nii(img, outfile, dat=None, overwrite=False, verbose=True):
     """Save a new NIfTI image to disc and return the saved filepath."""
-    if overwrite or not op.exists(outfile):
+    if op.exists(outfile) and not overwrite:
+        raise FileExistsError(f"File {outfile} already exists")
+    if dat is None:
+        nib.save(img, outfile)
+    else:
         newimg = nib.Nifti1Image(dat, affine=img.affine, header=img.header)
         newimg.to_filename(outfile)
-        if verbose:
-            print("Saved {}".format(outfile))
-        return outfile
-    else:
-        return None
+    if verbose:
+        print("Saved {}".format(outfile))
+    return outfile
 
 
 def dcm2niix(dcm_dir, remove_dicoms=False):
@@ -377,6 +378,100 @@ def recenter_niis(images, prefix=None, suffix=None, verbose=True):
     return outfiles
 
 
+# def recenter_nii(
+#     obj,
+#     outfile=None,
+#     prefix=None,
+#     suffix=None,
+#     save_output=True,
+#     overwrite=True,
+#     verbose=True,
+#     **kws,
+# ):
+#     """Recenter nifti image in the center of the voxel grid.
+
+#     This process involves rewriting the image header and does not affect
+#     the underlying image data. If save_output is True, the output file
+#     is saved to disk in the same directory as the input file. Default
+#     behavior is to overwrite the infile unless outfile or a prefix or
+#     suffix is specified.
+
+#     A note of caution: If overwrite is True and the infile plus a given
+#     prefix or suffix already exists, that file will be overwritten.
+
+#     Parameters
+#     ----------
+#     infile : str
+#         Path to the input image.
+#     outfile : str, optional
+#         Path to the output image. If outfile is defined, then prefix and
+#         suffix must both be None.
+#     prefix : str, optional
+#         Basename prefix for the output file. If prefix is defined, then
+#         outfile must be None.
+#     suffix : str, optional
+#         Basename suffix for the output file. If suffix is defined, then
+#         outfile must be None.
+#     save_output : bool
+#         Save the output image.
+#     overwrite : bool
+#         Overwrite the output image file if it already exists.
+#     verbose : bool
+#         Print the output filepath if the output file is saved.
+
+#     Returns
+#     -------
+#     img_out : nibabel.Nifti1Image
+#         Output image.
+#     dat : np.ndarray
+#         Output image data array (identical to the infile data array).
+#     outfile : str
+#         Output filepath.
+#     """
+#     import transforms3d.affines as affines
+
+#     # Load the input image.
+#     if isinstance(obj, str):
+#         infile = find_gzip(obj)
+#         img_in, dat_in = load_nii(infile)
+#     elif isinstance(obj, nib.Nifti1Pair):
+#         img_in, dat_in = load_nii_flex(obj, **kws)
+#         if np.all((outfile is None, prefix is None, suffix is None)):
+#             save_output = False
+#     else:
+#         raise ValueError("obj must be a NIfTI filepath or Nifti1Pair object")
+
+#     # Reset origin to center.
+#     T, R, Z, S = affines.decompose(img_in.affine)
+#     T_new = (np.asanyarray(img_in.shape[:3]) - 1) * 0.5 * Z
+#     T_new = np.sign(Z) * -1 * T_new
+#     aff_new = affines.compose(T_new, R, Z)
+#     img_out = nib.Nifti1Image(dataobj=dat_in, affine=aff_new)
+
+#     # Save the output image.
+#     if save_output:
+#         # Raise an error if outfile is specified along with prefix or suffix.
+#         if outfile is None:
+#             outfile = strm.add_presuf(infile, prefix, suffix)
+#         elif prefix is not None or suffix is not None:
+#             raise ValueError(
+#                 "Either outfile or prefix/suffix can be defined, but not both"
+#             )
+#         if verbose and (overwrite or not op.isfile(outfile)):
+#             print("Recentering {}".format(op.basename(infile)))
+#         outfile = save_nii(
+#             img=img_out,
+#             outfile=outfile,
+#             dat=dat_in,
+#             overwrite=overwrite,
+#             verbose=verbose,
+#         )
+#     else:
+#         outfile = None
+
+#     return img_out, dat_in, outfile
+
+
 def recenter_nii(
     obj,
     outfile=None,
@@ -385,65 +480,26 @@ def recenter_nii(
     save_output=True,
     overwrite=True,
     verbose=True,
-    **kws
+    **kws,
 ):
-    """Recenter nifti image in the center of the voxel grid.
-
-    This process involves rewriting the image header and does not affect
-    the underlying image data. If save_output is True, the output file
-    is saved to disk in the same directory as the input file. Default
-    behavior is to overwrite the infile unless outfile or a prefix or
-    suffix is specified.
-
-    A note of caution: If overwrite is True and the infile plus a given
-    prefix or suffix already exists, that file will be overwritten.
-
-    Parameters
-    ----------
-    infile : str
-        Path to the input image.
-    outfile : str, optional
-        Path to the output image. If outfile is defined, then prefix and
-        suffix must both be None.
-    prefix : str, optional
-        Basename prefix for the output file. If prefix is defined, then
-        outfile must be None.
-    suffix : str, optional
-        Basename suffix for the output file. If suffix is defined, then
-        outfile must be None.
-    save_output : bool
-        Save the output image.
-    overwrite : bool
-        Overwrite the output image file if it already exists.
-    verbose : bool
-        Print the output filepath if the output file is saved.
-
-    Returns
-    -------
-    img_out : nibabel.Nifti1Image
-        Output image.
-    dat : np.ndarray
-        Output image data array (identical to the infile data array).
-    outfile : str
-        Output filepath.
-    """
+    """Recenter nifti image to the center of the voxel grid as SPM."""
     # Load the input image.
     if isinstance(obj, str):
         infile = find_gzip(obj)
-        img_in, dat_in = load_nii(infile)
+        img, dat = load_nii(infile)
     elif isinstance(obj, nib.Nifti1Pair):
-        img_in, dat_in = load_nii_flex(obj, **kws)
+        img, dat = load_nii_flex(obj, **kws)
         if np.all((outfile is None, prefix is None, suffix is None)):
             save_output = False
     else:
         raise ValueError("obj must be a NIfTI filepath or Nifti1Pair object")
 
-    # Reset origin to center.
-    T, R, Z, S = affines.decompose(img_in.affine)
-    T_new = (np.asanyarray(img_in.shape[:3]) - 1) * 0.5 * Z
-    T_new = np.sign(Z) * -1 * T_new
-    aff_new = affines.compose(T_new, R, Z)
-    img_out = nib.Nifti1Image(dataobj=dat_in, affine=aff_new)
+    affine_new = img.affine.copy()
+    for ii in range(3):
+        affine_new[ii, 3] = ((img.shape[ii] - 1) * 0.5) * -affine_new[ii, ii]
+
+    # Update the image with the new affine
+    img.set_sform(affine_new)
 
     # Save the output image.
     if save_output:
@@ -454,19 +510,20 @@ def recenter_nii(
             raise ValueError(
                 "Either outfile or prefix/suffix can be defined, but not both"
             )
-        if verbose and (overwrite or not op.isfile(outfile)):
-            print("Recentering {}".format(op.basename(infile)))
-        outfile = save_nii(
-            img=img_out,
-            dat=dat_in,
-            outfile=outfile,
-            overwrite=overwrite,
-            verbose=verbose,
-        )
+        if overwrite or not op.isfile(outfile):
+            if verbose:
+                print("Recentering {}".format(op.basename(outfile)))
+            outfile = save_nii(
+                img=img,
+                outfile=outfile,
+                dat=dat,
+                overwrite=overwrite,
+                verbose=verbose,
+            )
     else:
         outfile = None
 
-    return img_out, dat_in, outfile
+    return img, dat, outfile
 
 
 def convert_values(
@@ -476,7 +533,7 @@ def convert_values(
     outfile_map=None,
     overwrite=False,
     verbose=True,
-    **kws
+    **kws,
 ):
     """Convert values in a NIfTI image.
 
@@ -520,7 +577,9 @@ def convert_values(
 
     # Save the output nifti.
     if outfile:
-        outfile = save_nii(img, outdat, outfile, overwrite=overwrite, verbose=verbose)
+        outfile = save_nii(
+            img=img, outfile=outfile, dat=outdat, overwrite=overwrite, verbose=verbose
+        )
         return outfile
     # Save an output nifti file for each value in outfile_map.
     else:
@@ -529,7 +588,11 @@ def convert_values(
             newdat = np.zeros_like(indat)
             newdat[outdat == newval] = 1
             newfile = save_nii(
-                img, newdat, newfile, overwrite=overwrite, verbose=verbose
+                img=img,
+                outfile=newfile,
+                dat=newdat,
+                overwrite=overwrite,
+                verbose=verbose,
             )
             newfiles.append(newfile)
         return newfiles
@@ -607,7 +670,13 @@ def create_suvr(
                 suvr_img = rr_img
         else:
             suvr_img = pet_img
-        outfile = save_nii(suvr_img, suvr_dat, outfile, overwrite, verbose)
+        outfile = save_nii(
+            img=suvr_img,
+            outfile=outfile,
+            dat=suvr_dat,
+            overwrite=overwrite,
+            verbose=verbose,
+        )
 
     if dat_only:
         return suvr_dat

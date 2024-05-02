@@ -42,6 +42,16 @@ class TextFormatter(argparse.RawTextHelpFormatter):
         return "%s%s\n\n" % (prefix, usage)
 
 
+def get_default_roi_file():
+    # Assuming 'general.nifti' is a package and 'fsroi_list.csv' is the file within it
+    resource_path = importlib.resources.files("general.nifti")
+    file_path = resource_path / "fsroi_list.csv"
+    if file_path.is_file():
+        return file_path.as_posix()
+    else:
+        raise FileNotFoundError("Default ROI file not found.")
+
+
 def _parse_args():
     """Parse and return command line arguments."""
     parser = argparse.ArgumentParser(
@@ -108,13 +118,11 @@ console (-q|--quiet).
         "-f",
         "--roi_file",
         type=str,
-        default=str(importlib.resources.path("general.nifti", "fsroi_list.csv")),
+        default=get_default_roi_file(),
         help=(
             "Path to the 2-column CSV file with ROI names and int or\n"
-            + "semicolon-separated labels\n"
-            + "(default: {})".format(
-                str(importlib.resources.path("general.nifti", "fsroi_list.csv"))
-            )
+            "semicolon-separated labels\n"
+            "(default: {})".format(get_default_roi_file())
         ),
     )
     parser.add_argument(
@@ -128,6 +136,18 @@ console (-q|--quiet).
         "--outputf",
         type=str,
         help="Output CSV filepath. If not specified, output is printed but not saved",
+    )
+    parser.add_argument(
+        "-s",
+        "--shape",
+        type=str,
+        default="long",
+        choices=["long", "wide", "l", "w"],
+        help=(
+            "Shape of the output dataframe. '-o wide' pivots the 'roi' column into\n"
+            "multiple columns (one for each region)\n"
+            "Default: %(default)s"
+        ),
     )
     parser.add_argument(
         "-q",
@@ -166,18 +186,31 @@ if __name__ == "__main__":
     args = _parse_args()
 
     # Print ROI names and labels in a nicely-formatted table.
+    def fmt_long_str(x, maxlen=50):
+        """Truncate long strings of semicolon-separated values."""
+        if len(x) <= maxlen:
+            return x
+        elif len(x) > maxlen:
+            stop = x[maxlen + 4 :].find(";")
+            if stop == -1:
+                return x
+            else:
+                # find the last ';'
+                start_last = x.rfind(";") + 1
+                return x[: stop + maxlen] + "..." + x[start_last:]
+
     if args.list_rois:
         all_rois = pd.read_csv(args.roi_file)
-        all_rois.iloc[:, 1] = all_rois.iloc[:, 1].apply(
-            lambda x: x[:50] + "..." if len(x) > 50 else x
-        )
-        output_str = all_rois.to_string()
-        output_strspl = output_str.split("\n")
-        header = output_strspl[0]
-        output_str = "\n".join(output_strspl[1:])
-        sep = "-" * len(output_strspl[0])
-        print(sep, header, sep, output_str, sep, sep="\n")
-        print("{:>{_}}".format(args.roi_file, _=len(sep)), end="\n" * 2)
+        all_rois["n_labels"] = all_rois.iloc[:, 1].apply(lambda x: len(x.split(";")))
+        all_rois.iloc[:, 1] = all_rois.iloc[:, 1].apply(fmt_long_str)
+        print(all_rois.to_markdown(index=False, tablefmt="rst"))
+        # output_str = all_rois.to_string()
+        # output_strspl = output_str.split("\n")
+        # header = output_strspl[0]
+        # output_str = "\n".join(output_strspl[1:])
+        # sep = "-" * len(output_strspl[0])
+        # print(sep, header, sep, output_str, sep, sep="\n")
+        print(args.roi_file, end="\n" * 2)
         sys.exit(0)
 
     # Get the ROI dictionary.
@@ -208,7 +241,7 @@ if __name__ == "__main__":
             _output = nops.roi_desc(dat=img, rois=args.masks)
             _output = _output.reset_index()
             _output.insert(0, "imgf", img)
-            _output.insert(1, "maskf", args.masks)
+            _output.insert(1, "roif", args.masks)
             output.append(_output)
     # Extract ROI values from parcellations.
     elif args.aparcs is not None:
@@ -227,10 +260,18 @@ if __name__ == "__main__":
             _output = nops.roi_desc(dat=img, rois=aparc, subrois=keep_rois)
             _output = _output.reset_index()
             _output.insert(0, "imgf", img)
-            _output.insert(1, "aparcf", aparc)
+            _output.insert(1, "roif", aparc)
             output.append(_output)
 
     output = pd.concat(output).reset_index(drop=True)
+
+    # Pivot the output dataframe.
+    if args.shape in ["wide", "w"]:
+        output = output.pivot(
+            index=["imgf", "roif"], columns="roi", values=["mean", "voxels"]
+        )
+        output.columns = ["_".join(col[::-1]).strip() for col in output.columns.values]
+        output = output.reset_index()
 
     # Save output.
     if args.outputf is not None:
@@ -239,12 +280,22 @@ if __name__ == "__main__":
 
     # Print output.
     if not args.quiet:
-        output_str = output.to_string(columns=["roi", "mean", "voxels"], index=False)
-        output_strspl = output_str.split("\n")
-        header = output_strspl[0]
-        output_str = "\n".join(output_strspl[1:])
-        sep = "-" * len(output_strspl[0])
-        print(sep, header, sep, output_str, sep, sep="\n", end="\n" * 2)
+        output["imgf"] = output["imgf"].apply(op.basename)
+        output["roif"] = output["roif"].apply(op.basename)
+        for col in output.columns:
+            if "mean" in col:
+                output[col] = output[col].astype(float)
+            elif "voxels" in col:
+                output[col] = output[col].astype(int)
+        output.columns = output.columns.str.replace("_", "\n")
+        print(
+            output.to_markdown(
+                index=False,
+                tablefmt="rst",
+                floatfmt=".4f",
+                intfmt=",",
+            )
+        )
 
     print(timer)
     sys.exit(0)
