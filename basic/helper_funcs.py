@@ -1,6 +1,7 @@
 """
 Helper functions for common tasks with simple python classes.
 """
+
 from time import time
 import datetime
 from itertools import chain, zip_longest
@@ -17,7 +18,7 @@ class Timer(object):
         """Start the global timer."""
         self.reset()
         if msg is None:
-            self.msg = "Ran in "
+            self.msg = "Time elapsed: "
         else:
             self.msg = msg
 
@@ -28,11 +29,11 @@ class Timer(object):
         minutes = int((elapsed % 3600) / 60)
         seconds = elapsed % 60
         if hours > 0:
-            msg = self.msg + "{}h, {}m and {:.3f}s".format(hours, minutes, seconds)
+            msg = self.msg + "{}h, {}m, {:.3f}s".format(hours, minutes, seconds)
         elif minutes > 0:
-            msg = self.msg + "{}m and {:.3f}s".format(minutes, seconds)
+            msg = self.msg + "{}m, {:.3f}s".format(minutes, seconds)
         else:
-            msg = self.msg + "{:.3f}s".format(seconds)
+            msg = self.msg + f"{elapsed}s"
         return msg
 
     def check(self, reset=False):

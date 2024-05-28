@@ -729,9 +729,27 @@ def roi_desc(dat, rois, subrois=None, aggf=np.mean, conv_nan=0):
 
     # Format the ROIs to be dict-like.
     if isinstance(rois, str):
-        rois = od({op.basename(rois).split(".")[0]: rois})
-    elif isinstance(rois, (list, tuple)):
-        rois = od({op.basename(roi).split(".")[0]: roi for roi in rois})
+        rois = [rois]
+
+    if isinstance(rois, (list, tuple)):
+        # rois = od({".".join(op.basename(roi).split(".")[:-1]): roi for roi in rois})
+        rois_dict = od([])
+        for roi in rois:
+            # splits = roi.split("_")
+            # for split in splits:
+            #     if split.startswith("mask-"):
+            #         roi_name = roi[5:].split(".")[0]
+            #         rois[roi_name] = roi
+            #         break
+            splits = strm.split(roi, ["_", "."])
+            for ii, string in enumerate(splits):
+                if string.startswith("mask-"):
+                    roi_name = "-".join(string.split("-")[1:])
+                    rois_dict[roi_name] = roi
+                    break
+                elif ii == len(splits) - 1:
+                    rois_dict[".".join(op.basename(roi).split(".")[:-1])] = roi
+        rois = rois_dict
     elif hasattr(rois, "keys"):
         pass
     else:

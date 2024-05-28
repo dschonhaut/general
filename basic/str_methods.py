@@ -1,8 +1,10 @@
 """
 String manipulation methods.
 """
+
 import os.path as op
 from glob import glob
+import re
 
 
 def add_presuf(infile, prefix=None, suffix=None):
@@ -23,6 +25,8 @@ def add_presuf(infile, prefix=None, suffix=None):
         The modified filepath.
     """
     infile = op.normpath(infile)
+    if (prefix is None) and (suffix is None):
+        return infile
     base = op.basename(infile)
     is_hidden = base[0] == "."
     if is_hidden:
@@ -39,6 +43,15 @@ def add_presuf(infile, prefix=None, suffix=None):
         sbase[0] = sbase[0] + suffix
     outfile = op.join(op.dirname(infile), prefix + ".".join(sbase))
     return outfile
+
+
+def split(string, delimiters):
+    """Split a string into a list of substrings by 1+ delimiters."""
+    if isinstance(delimiters, str):
+        delimiters = [delimiters]
+
+    pattern = "[" + re.escape("".join(delimiters)) + "]"
+    return [substring for substring in re.split(pattern, string) if len(substring) > 0]
 
 
 def str_replace(obj_in, replace_vals=None):

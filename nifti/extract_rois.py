@@ -204,48 +204,47 @@ if __name__ == "__main__":
         all_rois["n_labels"] = all_rois.iloc[:, 1].apply(lambda x: len(x.split(";")))
         all_rois.iloc[:, 1] = all_rois.iloc[:, 1].apply(fmt_long_str)
         print(all_rois.to_markdown(index=False, tablefmt="rst"))
-        # output_str = all_rois.to_string()
-        # output_strspl = output_str.split("\n")
-        # header = output_strspl[0]
-        # output_str = "\n".join(output_strspl[1:])
-        # sep = "-" * len(output_strspl[0])
-        # print(sep, header, sep, output_str, sep, sep="\n")
         print(args.roi_file, end="\n" * 2)
         sys.exit(0)
 
-    # Get the ROI dictionary.
+    # Load the ROI dictionary
     all_rois = load_rois(args.roi_file)
 
-    # Check that exactly one of masks and aparcs is specified.
+    # Check that at least one of masks or aparcs is specified
     if args.masks is None and args.aparcs is None:
-        print("ERROR: Either --masks (-m) or --aparcs (-a) must be specified!\n")
-        sys.exit(1)
-    elif args.masks is not None and args.aparcs is not None:
-        print("ERROR: --masks (-m) and --aparcs (-a) cannot both be specified!\n")
-        sys.exit(1)
-
-    # Check that the number of images and parcellations match.
-    if args.aparcs is not None and (len(args.images) != len(args.aparcs)):
         print(
-            "ERROR: Number of images and parcellation files must match!\n"
-            + "Found {} images and {} parcellation files".format(
-                len(args.images), len(args.aparcs)
-            )
+            "ERROR: At least one of --masks (-m) or --aparcs (-a) must be specified\n"
         )
         sys.exit(1)
+    # elif args.masks is not None and args.aparcs is not None:
+    #     print("ERROR: --masks (-m) and --aparcs (-a) cannot both be specified!\n")
+    #     sys.exit(1)
 
-    # Extract ROI values from masks.
+    # Check that the number of images and parcellations match
+    if args.aparcs is not None:
+        if (len(args.aparcs) > 1) and (len(args.images) != len(args.aparcs)):
+            print(
+                "ERROR: Number of images and parcellation files must match,\n"
+                + "or there must be only one parcellation file specified.\n"
+                + "Found {} images and {} parcellation files".format(
+                    len(args.images), len(args.aparcs)
+                )
+            )
+            sys.exit(1)
+
+    # Extract ROI values from masks
     output = []
     if args.masks is not None:
         for img in args.images:
             _output = nops.roi_desc(dat=img, rois=args.masks)
             _output = _output.reset_index()
-            _output.insert(0, "imgf", img)
-            _output.insert(1, "roif", args.masks)
+            _output.insert(0, "image_file", img)
+            _output.insert(1, "roi_file", args.masks)
             output.append(_output)
-    # Extract ROI values from parcellations.
-    elif args.aparcs is not None:
-        # Get ROIs.
+
+    # Extract ROI values from parcellations
+    if args.aparcs is not None:
+        # Get ROIs
         keep_rois = {}
         if args.aparc_rois is None:
             keep_rois = all_rois
@@ -255,20 +254,26 @@ if __name__ == "__main__":
                     print(f"WARNING: {roi} missing from {args.roi_file}")
                 else:
                     keep_rois[roi] = all_rois[roi]
-        # Extract ROI values.
+        # Broadcast inputs if needed
+        if (len(args.images) > 1) and (len(args.aparcs) == 1):
+            args.aparcs = args.aparcs * len(args.images)
+        # Extract ROI values
         for img, aparc in zip(args.images, args.aparcs):
             _output = nops.roi_desc(dat=img, rois=aparc, subrois=keep_rois)
             _output = _output.reset_index()
-            _output.insert(0, "imgf", img)
-            _output.insert(1, "roif", aparc)
+            _output.insert(0, "image_file", img)
+            _output.insert(1, "roi_file", aparc)
             output.append(_output)
 
     output = pd.concat(output).reset_index(drop=True)
+    output = output.rename(columns={"voxels": "voxel_count"})
 
-    # Pivot the output dataframe.
+    # Pivot the output dataframe
     if args.shape in ["wide", "w"]:
         output = output.pivot(
-            index=["imgf", "roif"], columns="roi", values=["mean", "voxels"]
+            index=["image_file", "roi_file"],
+            columns="roi",
+            values=["mean", "voxel_count"],
         )
         output.columns = ["_".join(col[::-1]).strip() for col in output.columns.values]
         output = output.reset_index()
@@ -280,13 +285,13 @@ if __name__ == "__main__":
 
     # Print output.
     if not args.quiet:
-        output["imgf"] = output["imgf"].apply(op.basename)
-        output["roif"] = output["roif"].apply(op.basename)
+        output["image_file"] = output["image_file"].apply(op.basename)
+        output["roi_file"] = output["roi_file"].apply(op.basename)
         for col in output.columns:
             if "mean" in col:
                 output[col] = output[col].astype(float)
-            elif "voxels" in col:
-                output[col] = output[col].astype(int)
+            elif "voxel_count" in col:
+                output[col] = output[col].astype(float)
         output.columns = output.columns.str.replace("_", "\n")
         print(
             output.to_markdown(
