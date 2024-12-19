@@ -216,9 +216,6 @@ if __name__ == "__main__":
             "ERROR: At least one of --masks (-m) or --aparcs (-a) must be specified\n"
         )
         sys.exit(1)
-    # elif args.masks is not None and args.aparcs is not None:
-    #     print("ERROR: --masks (-m) and --aparcs (-a) cannot both be specified!\n")
-    #     sys.exit(1)
 
     # Check that the number of images and parcellations match
     if args.aparcs is not None:

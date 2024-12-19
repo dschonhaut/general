@@ -69,8 +69,8 @@ def set_rcparams(rcparams):
     rcparams["figure.subplot.hspace"] = 0.2
     rcparams["figure.subplot.wspace"] = 0.2
     rcparams["figure.titlesize"] = font["title"]
-    rcparams["font.sans-serif"] = "Arial"
-    rcparams["font.serif"] = "Times New Roman"
+    # rcparams["font.sans-serif"] = "Arial"
+    # rcparams["font.serif"] = "Times New Roman"
     rcparams["font.family"] = "sans-serif"
     rcparams["grid.alpha"] = 0.5
     rcparams["grid.color"] = "#B7C6CF"

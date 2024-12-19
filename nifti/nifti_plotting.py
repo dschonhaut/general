@@ -329,7 +329,7 @@ def create_multislice(
                 ["{:{_}}".format(tick, _=cbar_tick_format) for tick in cbar_ticks]
             )
         if cbar_label is None:
-            if tracer is None:
+            if (tracer is None) or (tracer==""):
                 cbar_label = "Value"
             else:
                 cbar_label = f"{tracer_fancy} SUVR"
@@ -1211,7 +1211,7 @@ def get_tracer_defaults(
         if vmax is None:
             vmax = 2.5
         if cmap is None:
-            cmap = "nih"
+            cmap = "binary_r"
         if facecolor is None:
             facecolor = "k"
         if fontcolor is None:
